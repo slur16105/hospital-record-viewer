@@ -9,18 +9,11 @@ class DoctorInfo(BaseModel):
     department: str
 
 
-class RoomInfo(BaseModel):
-    id: UUID
-    room_number: str
-    department: str
-
-
 class MedicalRecordListItem(BaseModel):
     id: UUID
     visited_at: datetime
     diagnosis: str
     doctor: DoctorInfo
-    room: RoomInfo
     is_corrected: bool
 
 
