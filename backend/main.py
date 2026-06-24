@@ -1,0 +1,21 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from core.config import settings, APP_VERSION
+from routers import health
+
+app = FastAPI(
+    title="Hospital Record Viewer API",
+    version=APP_VERSION,
+)
+
+cors_origins = settings.get_cors_origins()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=cors_origins != ["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(health.router)
