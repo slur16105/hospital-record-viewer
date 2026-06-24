@@ -10,25 +10,17 @@ from models.medical_records import MedicalRecordDetail, MedicalRecordListItem, M
 
 router = APIRouter(tags=["medical-records"])
 
-_LIST_SELECT = (
-    "id, visited_at, diagnosis, is_corrected, "
-    "doctors!inner(id, user_id, departments!inner(name))"
-)
+_DOCTOR_JOIN = "doctors!inner(id, user_id, departments!inner(name))"
+
+_LIST_SELECT = f"id, visited_at, diagnosis, is_corrected, {_DOCTOR_JOIN}"
 
 _DETAIL_SELECT = (
     "id, visited_at, diagnosis, chief_complaint, prescription, "
-    "is_corrected, correction_note, corrected_at, created_at, "
-    "doctors!inner(id, user_id, departments!inner(name))"
+    f"is_corrected, correction_note, corrected_at, created_at, {_DOCTOR_JOIN}"
 )
 
 
-def _extract_token(request: Request) -> str:
-    parts = request.headers.get("authorization", "").split(" ", 1)
-    return parts[1] if len(parts) == 2 else ""
-
-
-def _log_access(token: str, user_id: str, action: str, record_id: str | None, ip: str | None) -> None:
-    client = get_supabase_for_user(token)
+def _log_access(client, user_id: str, action: str, record_id: str | None, ip: str | None) -> None:
     payload: dict = {"user_id": user_id, "action": action}
     if record_id:
         payload["record_id"] = record_id
@@ -37,7 +29,7 @@ def _log_access(token: str, user_id: str, action: str, record_id: str | None, ip
     client.table("access_logs").insert(payload).execute()
 
 
-def _enrich_records(rows: list[dict], token: str) -> list[MedicalRecordListItem]:
+def _enrich_records(rows: list[dict], client) -> list[MedicalRecordListItem]:
     if not rows:
         return []
 
@@ -45,9 +37,12 @@ def _enrich_records(rows: list[dict], token: str) -> list[MedicalRecordListItem]
         r["doctors"]["user_id"] for r in rows
         if r.get("doctors") and r["doctors"].get("user_id")
     })
-    client = get_supabase_for_user(token)
-    profiles = client.table("user_profiles").select("user_id, name").in_("user_id", user_ids).execute()
-    name_map = {p["user_id"]: p["name"] for p in (profiles.data or [])}
+
+    if not user_ids:
+        name_map: dict = {}
+    else:
+        profiles = client.table("user_profiles").select("user_id, name").in_("user_id", user_ids).execute()
+        name_map = {p["user_id"]: p["name"] for p in (profiles.data or [])}
 
     return [
         MedicalRecordListItem(
@@ -57,11 +52,12 @@ def _enrich_records(rows: list[dict], token: str) -> list[MedicalRecordListItem]
             is_corrected=r["is_corrected"],
             doctor=DoctorInfo(
                 id=r["doctors"]["id"],
-                name=name_map.get(r["doctors"]["user_id"], ""),
+                name=name_map.get(r["doctors"].get("user_id", ""), ""),
                 department=r["doctors"]["departments"]["name"],
             ),
         )
         for r in rows
+        if r.get("doctors") and r["doctors"].get("departments")
     ]
 
 
@@ -75,7 +71,7 @@ async def list_medical_records(
     from_date: date | None = None,
     to_date: date | None = None,
 ) -> MedicalRecordPage:
-    token = _extract_token(request)
+    token: str = current_user["token"]
     user_id: str = current_user["sub"]
     client = get_supabase_for_user(token)
 
@@ -88,9 +84,9 @@ async def list_medical_records(
     offset = (page - 1) * page_size
     result = query.order("visited_at", desc=True).range(offset, offset + page_size - 1).execute()
 
-    items = _enrich_records(result.data or [], token)
+    items = _enrich_records(result.data or [], client)
     ip = request.client.host if request.client else None
-    background_tasks.add_task(_log_access, token, user_id, "view_list", None, ip)
+    background_tasks.add_task(_log_access, client, user_id, "view_list", None, ip)
 
     return MedicalRecordPage(data=items, total=result.count or 0, page=page, page_size=page_size)
 
@@ -102,7 +98,7 @@ async def get_medical_record(
     background_tasks: BackgroundTasks,
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> MedicalRecordDetail:
-    token = _extract_token(request)
+    token: str = current_user["token"]
     user_id: str = current_user["sub"]
     client = get_supabase_for_user(token)
 
@@ -116,18 +112,35 @@ async def get_medical_record(
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    base = _enrich_records(result.data, token)[0]
     raw = result.data[0]
+    if not raw.get("doctors") or not raw["doctors"].get("departments"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    doctor_user_id = raw["doctors"].get("user_id")
+    if doctor_user_id:
+        profiles = (
+            client.table("user_profiles")
+            .select("user_id, name")
+            .eq("user_id", doctor_user_id)
+            .execute()
+        )
+        doctor_name = profiles.data[0]["name"] if profiles.data else ""
+    else:
+        doctor_name = ""
 
     ip = request.client.host if request.client else None
-    background_tasks.add_task(_log_access, token, user_id, "view_detail", str(record_id), ip)
+    background_tasks.add_task(_log_access, client, user_id, "view_detail", str(record_id), ip)
 
     return MedicalRecordDetail(
-        id=base.id,
-        visited_at=base.visited_at,
-        diagnosis=base.diagnosis,
-        doctor=base.doctor,
-        is_corrected=base.is_corrected,
+        id=raw["id"],
+        visited_at=raw["visited_at"],
+        diagnosis=raw["diagnosis"],
+        doctor=DoctorInfo(
+            id=raw["doctors"]["id"],
+            name=doctor_name,
+            department=raw["doctors"]["departments"]["name"],
+        ),
+        is_corrected=raw["is_corrected"],
         chief_complaint=raw.get("chief_complaint"),
         prescription=raw.get("prescription"),
         correction_note=raw.get("correction_note"),

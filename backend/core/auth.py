@@ -26,7 +26,7 @@ async def get_current_user(
             audience="authenticated",
             options={"leeway": 10},
         )
-        return payload
+        return {**payload, "token": token}
     except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

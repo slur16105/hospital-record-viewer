@@ -36,16 +36,7 @@ CREATE TABLE departments (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. 진료실
-CREATE TABLE examination_rooms (
-    id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
-    department_id UUID        NOT NULL REFERENCES departments(id),
-    room_number   VARCHAR(20) NOT NULL,
-    is_active     BOOLEAN     DEFAULT true,
-    created_at    TIMESTAMPTZ DEFAULT now(),
-    updated_at    TIMESTAMPTZ DEFAULT now(),
-    UNIQUE (department_id, room_number)
-);
+-- 4. (삭제됨: examination_rooms — 진료실은 별도 추적하지 않음)
 
 -- 5. 의사
 CREATE TABLE doctors (
@@ -74,7 +65,6 @@ CREATE TABLE medical_records (
     id              UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
     patient_id      UUID        NOT NULL REFERENCES patients(id),
     doctor_id       UUID        NOT NULL REFERENCES doctors(id),
-    room_id         UUID        NOT NULL REFERENCES examination_rooms(id),
     visited_at      TIMESTAMPTZ NOT NULL,
     chief_complaint TEXT,
     diagnosis       TEXT        NOT NULL,
