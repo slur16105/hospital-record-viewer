@@ -29,6 +29,13 @@ def _log_access(client, user_id: str, action: str, record_id: str | None, ip: st
     client.table("access_logs").insert(payload).execute()
 
 
+def _resolve_doctor_name(client, user_id: str | None) -> str:
+    if not user_id:
+        return ""
+    profiles = client.table("user_profiles").select("name").eq("user_id", user_id).execute()
+    return profiles.data[0]["name"] if profiles.data else ""
+
+
 def _enrich_records(rows: list[dict], client) -> list[MedicalRecordListItem]:
     if not rows:
         return []
@@ -117,16 +124,7 @@ async def get_medical_record(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
     doctor_user_id = raw["doctors"].get("user_id")
-    if doctor_user_id:
-        profiles = (
-            client.table("user_profiles")
-            .select("user_id, name")
-            .eq("user_id", doctor_user_id)
-            .execute()
-        )
-        doctor_name = profiles.data[0]["name"] if profiles.data else ""
-    else:
-        doctor_name = ""
+    doctor_name = _resolve_doctor_name(client, doctor_user_id)
 
     ip = request.client.host if request.client else None
     background_tasks.add_task(_log_access, client, user_id, "view_detail", str(record_id), ip)
