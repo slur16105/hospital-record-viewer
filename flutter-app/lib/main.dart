@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-// Replace with actual Vercel deployment URL after deploy
 const String kAppUrl = String.fromEnvironment(
   'APP_URL',
-  defaultValue: 'https://hospital-record-viewer.vercel.app',
+  defaultValue: 'https://frontend-production-2e582.up.railway.app',
 );
 
 void main() {
