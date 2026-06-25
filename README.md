@@ -77,13 +77,47 @@ erDiagram
     users ||--o{ access_logs : generates
     medical_records ||--o{ access_logs : accessed
 
-    users { uuid id PK; string email UK }
-    user_profiles { uuid user_id PK_FK; enum role; boolean must_change_password; boolean is_active }
-    departments { uuid id PK; string name UK; boolean is_active }
-    doctors { uuid id PK; uuid user_id FK; uuid department_id FK; string license_number }
-    patients { uuid id PK; uuid user_id FK; date birth_date; string phone }
-    medical_records { uuid id PK; uuid patient_id FK; uuid doctor_id FK; text diagnosis; boolean is_corrected }
-    access_logs { uuid id PK; uuid user_id FK; uuid record_id FK; access_action action; inet ip_address }
+    users {
+        uuid id PK
+        string email UK
+    }
+    user_profiles {
+        uuid user_id PK_FK
+        enum role
+        boolean must_change_password
+        boolean is_active
+    }
+    departments {
+        uuid id PK
+        string name UK
+        boolean is_active
+    }
+    doctors {
+        uuid id PK
+        uuid user_id FK
+        uuid department_id FK
+        string license_number
+    }
+    patients {
+        uuid id PK
+        uuid user_id FK
+        date birth_date
+        string phone
+    }
+    medical_records {
+        uuid id PK
+        uuid patient_id FK
+        uuid doctor_id FK
+        text diagnosis
+        boolean is_corrected
+    }
+    access_logs {
+        uuid id PK
+        uuid user_id FK
+        uuid record_id FK
+        string action
+        inet ip_address
+    }
 ```
 
 **주요 설계 결정:**
