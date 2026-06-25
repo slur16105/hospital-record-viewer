@@ -1,13 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-
-async function getAccessToken(): Promise<string | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  const { data: { session } } = await supabase.auth.getSession()
-  return session?.access_token ?? null
-}
+import { getAccessToken } from '@/lib/supabase/token'
 
 const FASTAPI_URL = process.env.FASTAPI_URL
 
