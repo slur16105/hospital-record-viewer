@@ -9,6 +9,9 @@ export default function AdminPage() {
           <li style={{ marginBottom: '0.5rem' }}>
             <Link href="/admin/departments">진료과목 관리</Link>
           </li>
+          <li style={{ marginBottom: '0.5rem' }}>
+            <Link href="/admin/rooms">진료실 관리</Link>
+          </li>
         </ul>
       </nav>
     </main>
