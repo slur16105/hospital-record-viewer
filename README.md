@@ -62,6 +62,41 @@ Next.js (Railway)
 
 ---
 
+## 데이터베이스 설계
+
+ERD는 직접 설계했으며, 의료 도메인 특성을 반영한 구조입니다.
+
+```mermaid
+erDiagram
+    users ||--|| user_profiles : has
+    user_profiles ||--o| doctors : "role=doctor"
+    user_profiles ||--o| patients : "role=patient"
+    departments ||--o{ doctors : belongs_to
+    patients ||--o{ medical_records : has
+    doctors ||--o{ medical_records : creates
+    users ||--o{ access_logs : generates
+    medical_records ||--o{ access_logs : accessed
+
+    users { uuid id PK; string email UK }
+    user_profiles { uuid user_id PK_FK; enum role; boolean must_change_password; boolean is_active }
+    departments { uuid id PK; string name UK; boolean is_active }
+    doctors { uuid id PK; uuid user_id FK; uuid department_id FK; string license_number }
+    patients { uuid id PK; uuid user_id FK; date birth_date; string phone }
+    medical_records { uuid id PK; uuid patient_id FK; uuid doctor_id FK; text diagnosis; boolean is_corrected }
+    access_logs { uuid id PK; uuid user_id FK; uuid record_id FK; access_action action; inet ip_address }
+```
+
+**주요 설계 결정:**
+
+- **진료기록 불변성** — 기록은 삭제하지 않습니다. 오기입 시 `is_corrected=true`로 표시하고 새 기록을 작성합니다 (실제 의료 도메인 관행 반영).
+- **접근 로그 Append-only** — `access_logs`는 RLS로 INSERT만 허용, 수정·삭제 불가. 감사 추적의 무결성을 보장합니다.
+- **역할 분리 구조** — `user_profiles`로 모든 역할의 공통 정보를 관리하고, 역할별 고유 속성은 `doctors` / `patients` 테이블로 분리합니다.
+- **Supabase Auth 비침습** — Auth가 관리하는 `users` 테이블은 직접 수정하지 않고 `user_profiles`로 1:1 확장합니다.
+
+상세 스키마: [`docs/dbdiagram-import.dbml`](docs/dbdiagram-import.dbml) · [`_bmad-output/planning-artifacts/erd.md`](_bmad-output/planning-artifacts/erd.md)
+
+---
+
 ## 로컬 실행
 
 ### 사전 준비
