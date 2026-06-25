@@ -18,6 +18,9 @@ export default function AdminPage() {
           <li style={{ marginBottom: '0.5rem' }}>
             <Link href="/admin/patients">환자 정보 관리</Link>
           </li>
+          <li style={{ marginBottom: '0.5rem' }}>
+            <Link href="/admin/access-logs">접근 로그 조회</Link>
+          </li>
         </ul>
       </nav>
     </main>
