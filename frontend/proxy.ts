@@ -39,7 +39,12 @@ export async function proxy(request: NextRequest) {
     path.startsWith('/doctor') ||
     path.startsWith('/patient') ||
     path === '/change-password'
-  const isAuthPath = path === '/login' || path === '/register' || path === '/forgot-password'
+  const isAuthPath = path === '/login' || path === '/forgot-password'
+
+  // /register 접근 차단 (관리자만 계정 생성)
+  if (path.startsWith('/register')) {
+    return NextResponse.rewrite(new URL('/not-found', request.url))
+  }
 
   // 비인증 사용자가 보호 경로 접근 → /login으로 리다이렉트
   // 세션 쿠키가 있으면 만료된 세션, 없으면 미로그인

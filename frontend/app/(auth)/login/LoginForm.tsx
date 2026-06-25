@@ -100,10 +100,6 @@ export default function LoginForm({ expired }: LoginFormProps) {
           </button>
         </form>
 
-        <p className={styles.registerLink}>
-          계정이 없으신가요?{' '}
-          <a href="/register">환자 회원가입</a>
-        </p>
         <p className={styles.forgotLink}>
           <a href="/forgot-password">비밀번호를 잊으셨나요?</a>
         </p>
