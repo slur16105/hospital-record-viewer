@@ -85,7 +85,7 @@ erDiagram
 - **역할 분리 구조** — `user_profiles`로 모든 역할의 공통 정보를 관리하고, 역할별 고유 속성은 `doctors` / `patients` 테이블로 분리합니다.
 - **Supabase Auth 비침습** — Auth가 관리하는 `users` 테이블은 직접 수정하지 않고 `user_profiles`로 1:1 확장합니다.
 
-상세 스키마: [`docs/dbdiagram-import.dbml`](docs/dbdiagram-import.dbml) · [`_bmad-output/planning-artifacts/erd.md`](_bmad-output/planning-artifacts/erd.md)
+상세 스키마: [`docs/dbdiagram-import.dbml`](docs/dbdiagram-import.dbml)
 
 ---
 
