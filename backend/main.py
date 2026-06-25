@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings, APP_VERSION
-from routers import health, medical_records
+from routers import health, medical_records, departments
 
 app = FastAPI(
     title="Hospital Record Viewer API",
@@ -20,3 +20,4 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(medical_records.router, prefix="/api")
+app.include_router(departments.router, prefix="/api")

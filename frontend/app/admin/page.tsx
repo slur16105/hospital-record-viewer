@@ -1,3 +1,16 @@
+import Link from 'next/link'
+
 export default function AdminPage() {
-  return <main><h1>관리자 대시보드</h1><p>구현 예정 (Epic 2)</p></main>
+  return (
+    <main style={{ maxWidth: 600, margin: '2rem auto', padding: '0 1rem' }}>
+      <h1>관리자 대시보드</h1>
+      <nav>
+        <ul style={{ listStyle: 'none', padding: 0, marginTop: '1rem' }}>
+          <li style={{ marginBottom: '0.5rem' }}>
+            <Link href="/admin/departments">진료과목 관리</Link>
+          </li>
+        </ul>
+      </nav>
+    </main>
+  )
 }
