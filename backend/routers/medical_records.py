@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 from datetime import date, timedelta
 from uuid import UUID
 from typing import Annotated
@@ -16,6 +17,8 @@ from models.medical_records import (
     DoctorInfo,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["medical-records"])
 
 _DOCTOR_JOIN = "doctors!inner(id, user_id, departments!inner(name))"
@@ -29,13 +32,19 @@ _DETAIL_SELECT = (
 )
 
 
-def _log_access(client, user_id: str, action: str, record_id: str | None, ip: str | None) -> None:
+def _log_access(user_id: str, action: str, record_id: str | None, ip: str | None) -> None:
+    # 접근 로그는 service_role(admin) 클라이언트로 기록한다.
+    # 유저 토큰 클라이언트는 RLS(access_logs_insert: user_id = auth.uid())에 막혀
+    # 백그라운드 태스크에서 조용히 실패한다. 읽기(access_logs.py)도 admin을 쓰므로 일관됨.
     payload: dict = {"user_id": user_id, "action": action}
     if record_id:
         payload["record_id"] = record_id
     if ip:
         payload["ip_address"] = ip
-    client.table("access_logs").insert(payload).execute()
+    try:
+        get_supabase_admin().table("access_logs").insert(payload).execute()
+    except Exception:  # 감사 로그 실패가 본 요청을 깨뜨리지 않도록, 단 조용히 삼키진 않는다
+        logger.exception("access_logs 기록 실패 user_id=%s action=%s", user_id, action)
 
 
 def _resolve_doctor_name(client, user_id: str | None) -> str:
@@ -134,7 +143,7 @@ async def list_medical_records(
 
     items = _enrich_records(rows, client)
     ip = request.client.host if request.client else None
-    background_tasks.add_task(_log_access, client, user_id, "view_list", None, ip)
+    background_tasks.add_task(_log_access, user_id, "view_list", None, ip)
 
     return MedicalRecordPage(data=items, total=total, page=page, page_size=page_size)
 
@@ -168,7 +177,7 @@ async def get_medical_record(
     doctor_name = _resolve_doctor_name(client, doctor_user_id)
 
     ip = request.client.host if request.client else None
-    background_tasks.add_task(_log_access, client, user_id, "view_detail", str(record_id), ip)
+    background_tasks.add_task(_log_access, user_id, "view_detail", str(record_id), ip)
 
     return MedicalRecordDetail(
         id=raw["id"],
@@ -240,7 +249,7 @@ async def create_medical_record(
     doctor_name = _resolve_doctor_name(client, raw["doctors"].get("user_id"))
 
     ip = request.client.host if request.client else None
-    background_tasks.add_task(_log_access, client, user_id, "view_detail", raw["id"], ip)
+    background_tasks.add_task(_log_access, user_id, "view_detail", raw["id"], ip)
 
     return MedicalRecordDetail(
         id=raw["id"],
