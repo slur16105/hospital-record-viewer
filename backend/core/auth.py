@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError, ExpiredSignatureError
 from .config import settings
+from .database import get_supabase_admin
 
 security = HTTPBearer(auto_error=False)
 
@@ -93,3 +94,36 @@ async def get_current_user(
             detail="Invalid token",
             headers=_AUTH_HEADERS,
         )
+
+
+async def require_admin(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """관리자 전용 엔드포인트 가드 — user_profiles.role이 admin이 아니면 403."""
+    sub = current_user.get("sub")
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리자 권한이 필요합니다",
+        )
+    try:
+        result = (
+            get_supabase_admin()
+            .table("user_profiles")
+            .select("role")
+            .eq("user_id", sub)
+            .execute()
+        )
+    except Exception:
+        # 권한 확인 불가 시 fail-closed
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="권한 확인에 실패했습니다. 잠시 후 다시 시도해주세요",
+        )
+    rows = result.data or []
+    if not rows or rows[0].get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리자 권한이 필요합니다",
+        )
+    return current_user

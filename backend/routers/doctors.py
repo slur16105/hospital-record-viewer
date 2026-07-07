@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from postgrest.exceptions import APIError as PostgrestAPIError
 
-from core.auth import get_current_user
+from core.auth import require_admin
 from core.database import get_supabase_admin, get_supabase_for_user
 from models.doctors import DoctorCreate, DoctorCreatedOut, DoctorOut, DoctorUpdate
 
@@ -51,7 +51,7 @@ def _flatten_doctor(row: dict, email: str = "") -> dict:
 
 @router.get("", response_model=list[DoctorOut])
 async def list_doctors(
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_admin)],
 ) -> list[DoctorOut]:
     admin = get_supabase_admin()
     result = (
@@ -89,7 +89,7 @@ async def list_doctors(
 @router.post("", response_model=DoctorCreatedOut, status_code=status.HTTP_201_CREATED)
 async def create_doctor(
     body: DoctorCreate,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_admin)],
 ) -> DoctorCreatedOut:
     admin = get_supabase_admin()
     temp_password = _generate_temp_password()
@@ -163,7 +163,7 @@ async def create_doctor(
 async def update_doctor(
     doctor_id: UUID,
     body: DoctorUpdate,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_admin)],
 ) -> DoctorOut:
     admin = get_supabase_admin()
     update_data = body.model_dump(exclude_unset=True)
@@ -228,7 +228,7 @@ async def update_doctor(
 @router.post("/{doctor_id}/reset-password", response_model=dict)
 async def reset_doctor_password(
     doctor_id: UUID,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_admin)],
 ) -> dict:
     admin = get_supabase_admin()
     existing = admin.table("doctors").select("user_id").eq("id", str(doctor_id)).execute()

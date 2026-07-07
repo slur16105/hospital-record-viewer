@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from core.auth import get_current_user
+from core.auth import require_admin
 from core.database import get_supabase_admin
 from models.patients_admin import PatientOut, PatientUpdate
 
@@ -27,7 +27,7 @@ def _build_patient_out(row: dict, email: str = "") -> PatientOut:
 
 @router.get("", response_model=list[PatientOut])
 async def list_patients(
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_admin)],
 ) -> list[PatientOut]:
     admin = get_supabase_admin()
     result = (
@@ -53,7 +53,7 @@ async def list_patients(
 async def update_patient(
     patient_id: UUID,
     body: PatientUpdate,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_admin)],
 ) -> PatientOut:
     admin = get_supabase_admin()
     update_data = body.model_dump(exclude_unset=True)
