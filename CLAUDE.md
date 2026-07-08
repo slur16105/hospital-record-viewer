@@ -76,7 +76,7 @@ python scripts/seed.py            # backend/.env 의 SERVICE_ROLE 키 사용
 
 3. **Next.js 16 — 알던 Next가 아니다.** `frontend/AGENTS.md` 경고대로 API·관례·파일 구조가 다를 수 있다. 미들웨어 파일이 `middleware.ts`가 아니라 **`proxy.ts`**다. 코드 작성 전 `node_modules/next/dist/docs/`의 해당 가이드를 확인할 것.
 
-4. **이연된 보안 작업이 있다.** `_bmad-output/implementation-artifacts/deferred-work.md`에 JWT `iss` 클레임 검증, Supabase 예외 처리, `X-Forwarded-For` IP 처리, 클라이언트 싱글톤화 등 7건이 미처리 상태로 기록되어 있음. 운영 하드닝 작업 시 여기부터 볼 것.
+4. **이연된 보안 작업이 있다.** `_bmad-output/implementation-artifacts/deferred-work.md` 참고. 2026-07-08 기준 관리자 역할 가드(#관리자 전용 API), JWT `iss` 검증(#2), 권한 거부 로깅(#9), Supabase 예외 처리(#6), CORS 검증(#3), `X-Forwarded-For` IP 처리(#7)는 완료. 남은 미처리: 클라이언트 싱글톤(#1), async 내 동기 호출(#8), 접근로그 백그라운드 토큰 만료(#4), `!inner` JOIN 취약성(#5). 운영 하드닝 시 여기부터 볼 것.
 
 ## BMad 산출물
 

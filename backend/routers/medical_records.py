@@ -1,4 +1,5 @@
 from __future__ import annotations
+import ipaddress
 import logging
 from datetime import date, timedelta
 from uuid import UUID
@@ -30,6 +31,29 @@ _DETAIL_SELECT = (
     "id, visited_at, diagnosis, chief_complaint, prescription, "
     f"is_corrected, correction_note, corrected_at, created_at, room_id, {_DOCTOR_JOIN}, {_ROOM_JOIN}"
 )
+
+
+def _valid_ip(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        ipaddress.ip_address(value)
+        return value
+    except ValueError:
+        return None
+
+
+def _client_ip(request: Request) -> str | None:
+    # Railway 등 프록시 뒤에서는 request.client.host가 프록시 IP다.
+    # X-Forwarded-For의 첫 번째(원 클라이언트) IP를 우선 사용하되, 형식을 검증한다.
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        first = forwarded.split(",", 1)[0].strip()
+        ip = _valid_ip(first)
+        if ip:
+            return ip
+    peer = request.client.host if request.client else None
+    return _valid_ip(peer)
 
 
 def _log_access(user_id: str, action: str, record_id: str | None, ip: str | None) -> None:
@@ -142,7 +166,7 @@ async def list_medical_records(
                 raise HTTPException(status.HTTP_403_FORBIDDEN, "이 환자의 진료기록에 접근할 권한이 없습니다")
 
     items = _enrich_records(rows, client)
-    ip = request.client.host if request.client else None
+    ip = _client_ip(request)
     background_tasks.add_task(_log_access, user_id, "view_list", None, ip)
 
     return MedicalRecordPage(data=items, total=total, page=page, page_size=page_size)
@@ -176,7 +200,7 @@ async def get_medical_record(
     doctor_user_id = raw["doctors"].get("user_id")
     doctor_name = _resolve_doctor_name(client, doctor_user_id)
 
-    ip = request.client.host if request.client else None
+    ip = _client_ip(request)
     background_tasks.add_task(_log_access, user_id, "view_detail", str(record_id), ip)
 
     return MedicalRecordDetail(
@@ -248,7 +272,7 @@ async def create_medical_record(
     raw = result.data[0]
     doctor_name = _resolve_doctor_name(client, raw["doctors"].get("user_id"))
 
-    ip = request.client.host if request.client else None
+    ip = _client_ip(request)
     background_tasks.add_task(_log_access, user_id, "view_detail", raw["id"], ip)
 
     return MedicalRecordDetail(
