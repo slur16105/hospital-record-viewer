@@ -1,10 +1,13 @@
 from __future__ import annotations
+import logging
 import httpx
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError, ExpiredSignatureError
 from .config import settings
 from .database import get_supabase_admin
+
+logger = logging.getLogger(__name__)
 
 security = HTTPBearer(auto_error=False)
 
@@ -16,7 +19,12 @@ _JWKS_CACHE: dict | None = None
 
 
 def _jwks_url() -> str:
-    return f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+    return f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+
+
+def _issuer() -> str:
+    # Supabase 토큰의 iss 클레임 — 이 프로젝트가 발급한 토큰인지 검증
+    return f"{settings.supabase_url.rstrip('/')}/auth/v1"
 
 
 async def _get_jwks(force: bool = False) -> dict:
@@ -63,6 +71,7 @@ async def get_current_user(
                 settings.supabase_jwt_secret,
                 algorithms=["HS256"],
                 audience="authenticated",
+                issuer=_issuer(),
                 options={"leeway": 10},
             )
         else:
@@ -78,6 +87,7 @@ async def get_current_user(
                 key,
                 algorithms=[alg],
                 audience="authenticated",
+                issuer=_issuer(),
                 options={"leeway": 10},
             )
 
@@ -96,12 +106,23 @@ async def get_current_user(
         )
 
 
+def _log_admin_denied(request: Request, user: str, reason: str) -> None:
+    # 경로에 개행이 섞이면 로그 라인 위조가 가능 → 제거
+    path = request.url.path.replace("\n", " ").replace("\r", " ")
+    logger.warning(
+        "admin 접근 거부 method=%s path=%s user=%s reason=%s",
+        request.method, path, user, reason,
+    )
+
+
 async def require_admin(
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
     """관리자 전용 엔드포인트 가드 — user_profiles.role이 admin이 아니면 403."""
     sub = current_user.get("sub")
     if not sub:
+        _log_admin_denied(request, "unknown", "no_sub")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="관리자 권한이 필요합니다",
@@ -115,13 +136,22 @@ async def require_admin(
             .execute()
         )
     except Exception:
-        # 권한 확인 불가 시 fail-closed
+        # 권한 확인 불가 시 fail-closed. 원인 추적을 위해 예외를 기록한다.
+        logger.exception("admin 권한 조회 실패 user=%s", sub)
+        _log_admin_denied(request, sub, "lookup_error")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="권한 확인에 실패했습니다. 잠시 후 다시 시도해주세요",
         )
     rows = result.data or []
-    if not rows or rows[0].get("role") != "admin":
+    if not rows:
+        _log_admin_denied(request, sub, "no_profile")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리자 권한이 필요합니다",
+        )
+    if rows[0].get("role") != "admin":
+        _log_admin_denied(request, sub, "role")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="관리자 권한이 필요합니다",
