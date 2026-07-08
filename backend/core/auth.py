@@ -115,7 +115,7 @@ def _log_admin_denied(request: Request, user: str, reason: str) -> None:
     )
 
 
-async def require_admin(
+def require_admin(
     request: Request,
     current_user: dict = Depends(get_current_user),
 ) -> dict:

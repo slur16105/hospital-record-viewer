@@ -50,7 +50,7 @@ def _flatten_doctor(row: dict, email: str = "") -> dict:
 
 
 @router.get("", response_model=list[DoctorOut])
-async def list_doctors(
+def list_doctors(
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> list[DoctorOut]:
     admin = get_supabase_admin()
@@ -87,7 +87,7 @@ async def list_doctors(
 
 
 @router.post("", response_model=DoctorCreatedOut, status_code=status.HTTP_201_CREATED)
-async def create_doctor(
+def create_doctor(
     body: DoctorCreate,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> DoctorCreatedOut:
@@ -160,7 +160,7 @@ async def create_doctor(
 
 
 @router.patch("/{doctor_id}", response_model=DoctorOut)
-async def update_doctor(
+def update_doctor(
     doctor_id: UUID,
     body: DoctorUpdate,
     current_user: Annotated[dict, Depends(require_admin)],
@@ -226,7 +226,7 @@ async def update_doctor(
 
 
 @router.post("/{doctor_id}/reset-password", response_model=dict)
-async def reset_doctor_password(
+def reset_doctor_password(
     doctor_id: UUID,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> dict:

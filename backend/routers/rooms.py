@@ -41,7 +41,7 @@ def _check_duplicate(client, room_number: str, department_id: str, exclude_id: s
 
 
 @router.get("", response_model=list[RoomOut])
-async def list_rooms(
+def list_rooms(
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> list[RoomOut]:
     client = get_supabase_for_user(current_user["token"])
@@ -55,7 +55,7 @@ async def list_rooms(
 
 
 @router.post("", response_model=RoomOut, status_code=status.HTTP_201_CREATED)
-async def create_room(
+def create_room(
     body: RoomCreate,
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> RoomOut:
@@ -78,7 +78,7 @@ async def create_room(
 
 
 @router.patch("/{room_id}", response_model=RoomOut)
-async def update_room(
+def update_room(
     room_id: UUID,
     body: RoomUpdate,
     current_user: Annotated[dict, Depends(get_current_user)],

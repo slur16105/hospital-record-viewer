@@ -28,7 +28,7 @@ def _check_duplicate_name(client, name: str, exclude_id: str | None = None) -> N
 
 
 @router.get("", response_model=list[DepartmentOut])
-async def list_departments(
+def list_departments(
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> list[DepartmentOut]:
     client = get_supabase_for_user(current_user["token"])
@@ -37,7 +37,7 @@ async def list_departments(
 
 
 @router.post("", response_model=DepartmentOut, status_code=status.HTTP_201_CREATED)
-async def create_department(
+def create_department(
     body: DepartmentCreate,
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> DepartmentOut:
@@ -55,7 +55,7 @@ async def create_department(
 
 
 @router.patch("/{dept_id}", response_model=DepartmentOut)
-async def update_department(
+def update_department(
     dept_id: UUID,
     body: DepartmentUpdate,
     current_user: Annotated[dict, Depends(get_current_user)],

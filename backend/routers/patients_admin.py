@@ -26,7 +26,7 @@ def _build_patient_out(row: dict, email: str = "") -> PatientOut:
 
 
 @router.get("", response_model=list[PatientOut])
-async def list_patients(
+def list_patients(
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> list[PatientOut]:
     admin = get_supabase_admin()
@@ -50,7 +50,7 @@ async def list_patients(
 
 
 @router.patch("/{patient_id}", response_model=PatientOut)
-async def update_patient(
+def update_patient(
     patient_id: UUID,
     body: PatientUpdate,
     current_user: Annotated[dict, Depends(require_admin)],

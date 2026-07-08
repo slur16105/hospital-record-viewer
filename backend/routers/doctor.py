@@ -25,7 +25,7 @@ def _get_doctor_row(user_id: str) -> dict:
 
 
 @router.get("/profile", response_model=DoctorProfile)
-async def get_doctor_profile(
+def get_doctor_profile(
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> DoctorProfile:
     user_id: str = current_user["sub"]
@@ -46,7 +46,7 @@ async def get_doctor_profile(
 
 
 @router.get("/my-patients", response_model=list[MyPatientItem])
-async def get_my_patients(
+def get_my_patients(
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> list[MyPatientItem]:
     user_id: str = current_user["sub"]
@@ -106,7 +106,7 @@ async def get_my_patients(
 
 
 @router.get("/patients/search", response_model=list[PatientSearchItem])
-async def search_patients(
+def search_patients(
     current_user: Annotated[dict, Depends(get_current_user)],
     name: Annotated[str | None, Query()] = None,
     birth_date: date | None = None,

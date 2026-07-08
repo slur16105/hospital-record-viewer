@@ -12,7 +12,7 @@ router = APIRouter(prefix="/access-logs", tags=["access-logs"])
 
 
 @router.get("", response_model=AccessLogPage)
-async def list_access_logs(
+def list_access_logs(
     current_user: Annotated[dict, Depends(require_admin)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,

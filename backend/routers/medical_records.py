@@ -119,7 +119,7 @@ def _enrich_records(rows: list[dict], client) -> list[MedicalRecordListItem]:
 
 
 @router.get("/medical-records", response_model=MedicalRecordPage)
-async def list_medical_records(
+def list_medical_records(
     request: Request,
     background_tasks: BackgroundTasks,
     current_user: Annotated[dict, Depends(get_current_user)],
@@ -173,7 +173,7 @@ async def list_medical_records(
 
 
 @router.get("/medical-records/{record_id}", response_model=MedicalRecordDetail)
-async def get_medical_record(
+def get_medical_record(
     record_id: UUID,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -223,7 +223,7 @@ async def get_medical_record(
 
 
 @router.post("/medical-records", status_code=201, response_model=MedicalRecordDetail)
-async def create_medical_record(
+def create_medical_record(
     body: MedicalRecordCreate,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -295,7 +295,7 @@ async def create_medical_record(
 
 
 @router.patch("/medical-records/{record_id}", response_model=MedicalRecordDetail)
-async def update_medical_record(
+def update_medical_record(
     record_id: UUID,
     body: MedicalRecordUpdate,
     current_user: Annotated[dict, Depends(get_current_user)],
