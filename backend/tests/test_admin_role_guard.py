@@ -5,7 +5,7 @@ from .conftest import auth_headers
 ADMIN_ONLY_PATHS = ["/api/access-logs", "/api/patients", "/api/doctors"]
 
 # 쓰기 계열 관리자 전용 엔드포인트 — (method, path, json body)
-# 가드(require_admin)가 본문 검증보다 먼저 실행되므로 빈 body로 403을 확인할 수 있다.
+# 가드(require_permission)가 본문 검증보다 먼저 실행되므로 빈 body로 403을 확인할 수 있다.
 _DUMMY_ID = "00000000-0000-0000-0000-000000000000"
 ADMIN_ONLY_WRITES = [
     ("post", "/api/doctors", {}),
@@ -20,7 +20,7 @@ ADMIN_ONLY_WRITES = [
 def test_patient_token_gets_403(client, patient_token, path):
     resp = client.get(path, headers=auth_headers(patient_token))
     assert resp.status_code == 403
-    assert resp.json()["detail"] == "관리자 권한이 필요합니다"
+    assert resp.json()["detail"] == "권한이 없습니다"
 
 
 @pytest.mark.integration
@@ -28,7 +28,7 @@ def test_patient_token_gets_403(client, patient_token, path):
 def test_doctor_token_gets_403(client, doctor_token, path):
     resp = client.get(path, headers=auth_headers(doctor_token))
     assert resp.status_code == 403
-    assert resp.json()["detail"] == "관리자 권한이 필요합니다"
+    assert resp.json()["detail"] == "권한이 없습니다"
 
 
 @pytest.mark.integration
@@ -36,7 +36,7 @@ def test_doctor_token_gets_403(client, doctor_token, path):
 def test_patient_token_gets_403_on_writes(client, patient_token, method, path, body):
     resp = getattr(client, method)(path, json=body, headers=auth_headers(patient_token))
     assert resp.status_code == 403
-    assert resp.json()["detail"] == "관리자 권한이 필요합니다"
+    assert resp.json()["detail"] == "권한이 없습니다"
 
 
 @pytest.mark.integration

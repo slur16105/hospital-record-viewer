@@ -40,7 +40,7 @@ export default function ChangePasswordForm() {
       return
     }
 
-    router.push('/doctor')
+    router.push('/')
   }
 
   return (

@@ -5,8 +5,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from postgrest.exceptions import APIError as PostgrestAPIError
 
-from core.auth import get_current_user
-from core.database import get_supabase_for_user
+from core.authz import require_permission
+from core.database import get_supabase_admin
+from core.permissions import P
 from models.departments import DepartmentCreate, DepartmentOut, DepartmentUpdate
 
 router = APIRouter(prefix="/departments", tags=["departments"])
@@ -29,9 +30,9 @@ def _check_duplicate_name(client, name: str, exclude_id: str | None = None) -> N
 
 @router.get("", response_model=list[DepartmentOut])
 def list_departments(
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_permission(P.DEPARTMENTS_READ))],
 ) -> list[DepartmentOut]:
-    client = get_supabase_for_user(current_user["token"])
+    client = get_supabase_admin()
     result = client.table("departments").select("id, name, is_active").order("name").execute()
     return result.data or []
 
@@ -39,9 +40,9 @@ def list_departments(
 @router.post("", response_model=DepartmentOut, status_code=status.HTTP_201_CREATED)
 def create_department(
     body: DepartmentCreate,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_permission(P.DEPARTMENTS_MANAGE))],
 ) -> DepartmentOut:
-    client = get_supabase_for_user(current_user["token"])
+    client = get_supabase_admin()
     _check_duplicate_name(client, body.name)
     try:
         result = client.table("departments").insert({"name": body.name}).execute()
@@ -58,9 +59,9 @@ def create_department(
 def update_department(
     dept_id: UUID,
     body: DepartmentUpdate,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_permission(P.DEPARTMENTS_MANAGE))],
 ) -> DepartmentOut:
-    client = get_supabase_for_user(current_user["token"])
+    client = get_supabase_admin()
     update_data = body.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="수정할 항목이 없습니다")

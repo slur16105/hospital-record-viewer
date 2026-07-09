@@ -1,11 +1,10 @@
 from __future__ import annotations
 import logging
 import httpx
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError, ExpiredSignatureError
 from .config import settings
-from .database import get_supabase_admin
 
 logger = logging.getLogger(__name__)
 
@@ -101,47 +100,5 @@ async def get_current_user(
         )
 
 
-def _log_admin_denied(request: Request, user: str, reason: str) -> None:
-    # 경로에 개행이 섞이면 로그 라인 위조가 가능 → 제거
-    path = request.url.path.replace("\n", " ").replace("\r", " ")
-    logger.warning(
-        "admin 접근 거부 method=%s path=%s user=%s reason=%s",
-        request.method, path, user, reason,
-    )
-
-
-def require_admin(
-    request: Request,
-    current_user: dict = Depends(get_current_user),
-) -> dict:
-    """관리자 전용 엔드포인트 가드 — user_profiles.role이 admin이 아니면 403."""
-    sub = current_user.get("sub")
-
-    def _deny(reason: str) -> None:
-        _log_admin_denied(request, sub or "unknown", reason)
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "관리자 권한이 필요합니다")
-
-    if not sub:
-        _deny("no_sub")
-    try:
-        result = (
-            get_supabase_admin()
-            .table("user_profiles")
-            .select("role")
-            .eq("user_id", sub)
-            .execute()
-        )
-    except Exception:
-        # 권한 확인 불가 시 fail-closed. 원인 추적을 위해 예외를 기록한다.
-        logger.exception("admin 권한 조회 실패 user=%s", sub)
-        _log_admin_denied(request, sub, "lookup_error")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="권한 확인에 실패했습니다. 잠시 후 다시 시도해주세요",
-        )
-    rows = result.data or []
-    if not rows:
-        _deny("no_profile")
-    if rows[0].get("role") != "admin":
-        _deny("role")
-    return current_user
+# Story 10.1: require_admin(user_profiles.role 역할명 판정)은 제거됨 —
+# 모든 보호 엔드포인트는 core.authz.require_permission 권한 선언을 사용한다 (AD-6·AD-10).

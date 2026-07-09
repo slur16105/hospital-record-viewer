@@ -121,6 +121,42 @@ def require_permission(code: str):
     return dependency
 
 
+def require_any_permission(*codes: str):
+    """여러 권한 중 **하나라도** 보유하면 통과하는 인가 선언 (Story 10.1).
+
+    사용: Depends(require_any_permission(P.RECORDS_READ_ALL, P.RECORDS_READ_ASSIGNED)).
+    스코프 확장 판단(전체/담당/본인 필터)은 반환된 "permissions"로 엔드포인트가 수행한다.
+    """
+    if not codes:
+        raise ValueError("require_any_permission에는 최소 1개 권한 코드가 필요합니다")
+
+    def dependency(
+        request: Request,
+        current_user: dict = Depends(get_current_user),
+    ) -> dict:
+        sub = current_user.get("sub")
+        if not sub:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "권한이 없습니다")
+        try:
+            permissions = get_user_permissions(sub)
+        except Exception:
+            logger.exception("권한 조회 실패 user=%s codes=%s", sub, codes)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="권한 확인에 실패했습니다. 잠시 후 다시 시도해주세요",
+            )
+        if not permissions.intersection(codes):
+            path = request.url.path.replace("\n", " ").replace("\r", " ")
+            logger.warning(
+                "권한 거부 method=%s path=%s user=%s required_any=%s",
+                request.method, path, sub, codes,
+            )
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "권한이 없습니다")
+        return {**current_user, "permissions": permissions}
+
+    return dependency
+
+
 # ------------------------------------------------------------
 # is_system 역할 보호 유틸
 # ------------------------------------------------------------

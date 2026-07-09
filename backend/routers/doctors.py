@@ -1,16 +1,24 @@
+"""의사 계정 관리 구 라우터 — /api/users(통합 사용자 관리)로 대체됨.
+
+Story 10.1: require_admin(역할명 판정)을 require_permission(P.USERS_*)로 교체.
+구 프론트 화면이 Epic 9에서 제거되므로 내부 로직은 유지한다.
+TODO(00013): 구 화면 제거 확인 후 이 라우터 전체 삭제 예정.
+"""
 from __future__ import annotations
 import secrets
 import string
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from postgrest.exceptions import APIError as PostgrestAPIError
 
-from core.auth import require_admin
-from core.database import get_supabase_admin, get_supabase_for_user
+from core.authz import require_permission
+from core.database import get_supabase_admin
+from core.permissions import P
 from models.doctors import DoctorCreate, DoctorCreatedOut, DoctorOut, DoctorUpdate
 
-router = APIRouter(prefix="/doctors", tags=["doctors"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/doctors", tags=["doctors"])
 
 _DOCTOR_SELECT = (
     "id, user_id, license_number, is_active, is_active, departments(name, id), "
@@ -49,7 +57,9 @@ def _flatten_doctor(row: dict, email: str = "") -> dict:
 
 
 @router.get("", response_model=list[DoctorOut])
-def list_doctors() -> list[DoctorOut]:
+def list_doctors(
+    current_user: Annotated[dict, Depends(require_permission(P.USERS_READ))],
+) -> list[DoctorOut]:
     admin = get_supabase_admin()
     result = (
         admin.table("doctors")
@@ -86,6 +96,7 @@ def list_doctors() -> list[DoctorOut]:
 @router.post("", response_model=DoctorCreatedOut, status_code=status.HTTP_201_CREATED)
 def create_doctor(
     body: DoctorCreate,
+    current_user: Annotated[dict, Depends(require_permission(P.USERS_CREATE))],
 ) -> DoctorCreatedOut:
     admin = get_supabase_admin()
     temp_password = _generate_temp_password()
@@ -110,6 +121,7 @@ def create_doctor(
         admin.table("user_profiles").insert({
             "user_id": new_user_id,
             "name": body.name,
+            # 레거시 NOT NULL 컬럼 충족용 — RBAC 판정에 미사용, 00013에서 제거 예정
             "role": "doctor",
             "must_change_password": True,
         }).execute()
@@ -159,6 +171,7 @@ def create_doctor(
 def update_doctor(
     doctor_id: UUID,
     body: DoctorUpdate,
+    current_user: Annotated[dict, Depends(require_permission(P.USERS_UPDATE))],
 ) -> DoctorOut:
     admin = get_supabase_admin()
     update_data = body.model_dump(exclude_unset=True)
@@ -223,6 +236,7 @@ def update_doctor(
 @router.post("/{doctor_id}/reset-password", response_model=dict)
 def reset_doctor_password(
     doctor_id: UUID,
+    current_user: Annotated[dict, Depends(require_permission(P.PASSWORD_RESET_OTHERS))],
 ) -> dict:
     admin = get_supabase_admin()
     existing = admin.table("doctors").select("user_id").eq("id", str(doctor_id)).execute()

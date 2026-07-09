@@ -1,11 +1,12 @@
+// 인증 전용 프록시 (Story 9.1, AD-6).
+// 여기서는 "누구인지(세션)"만 판정한다 — "무엇을 할 수 있는지(인가)"는
+// 백엔드가 permissions로 판정하고 403을 반환한다. 역할별 경로 매칭은 제거됨.
+
 import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 
-const ROLE_HOME: Record<string, string> = {
-  admin: '/admin',
-  doctor: '/doctor',
-  patient: '/patient',
-}
+// 비로그인으로 접근 가능한 경로 (비밀번호 재설정은 전 사용자 대상 — FR-1b)
+const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password']
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -34,28 +35,15 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const path = request.nextUrl.pathname
-  // 노코드 관리 화면(Epic 7·8) — /admin과 동일하게 admin 전용 취급
-  const isAdminManagedPath = path.startsWith('/roles') || path.startsWith('/users')
-  const isProtectedPath =
-    path.startsWith('/admin') ||
-    path.startsWith('/doctor') ||
-    path.startsWith('/patient') ||
-    isAdminManagedPath ||
-    path === '/change-password'
-  const isAuthPath = path === '/login' || path === '/forgot-password'
-
-  // /register 접근 차단 (관리자만 계정 생성)
-  if (path.startsWith('/register')) {
-    return NextResponse.rewrite(new URL('/not-found', request.url))
-  }
+  const isPublicPath = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))
 
   // 비인증 사용자가 보호 경로 접근 → /login으로 리다이렉트
   // 세션 쿠키가 있으면 만료된 세션, 없으면 미로그인
-  if (!user && isProtectedPath) {
+  if (!user && !isPublicPath) {
     const loginUrl = new URL('/login', request.url)
-    const hasAuthCookie = request.cookies.getAll().some(
-      (c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
-    )
+    const hasAuthCookie = request.cookies
+      .getAll()
+      .some((c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token'))
     if (hasAuthCookie) loginUrl.searchParams.set('expired', '1')
     return redirectWithCookies(loginUrl, supabaseResponse)
   }
@@ -63,39 +51,18 @@ export async function proxy(request: NextRequest) {
   if (user) {
     const { data: profile } = await supabase
       .from('user_profiles')
-      .select('role, must_change_password')
+      .select('must_change_password')
       .eq('user_id', user.id)
       .single()
 
-    const role = profile?.role as 'admin' | 'doctor' | 'patient' | null
-    const mustChangePw = profile?.must_change_password === true
-
-    // 로그인된 사용자가 /login 또는 /register 접근 → 역할 홈으로 리다이렉트
-    if (isAuthPath && role && ROLE_HOME[role]) {
-      return redirectWithCookies(new URL(ROLE_HOME[role], request.url), supabaseResponse)
-    }
-
-    // 비의사 역할이 /change-password 접근 → 역할 홈으로 리다이렉트
-    if (path === '/change-password' && role !== 'doctor') {
-      const home = ROLE_HOME[role as string] ?? '/'
-      return redirectWithCookies(new URL(home, request.url), supabaseResponse)
-    }
-
-    // doctor + must_change_password=true: /change-password 외 모든 경로 차단
-    if (role === 'doctor' && mustChangePw && path !== '/change-password') {
+    // 임시 비밀번호 상태: /change-password 외 모든 경로 차단
+    if (profile?.must_change_password === true && path !== '/change-password') {
       return redirectWithCookies(new URL('/change-password', request.url), supabaseResponse)
     }
 
-    // 역할 불일치 시 → 자신의 역할 홈으로 리다이렉트
-    if (role && ROLE_HOME[role]) {
-      const wrongRole =
-        ((path.startsWith('/admin') || isAdminManagedPath) && role !== 'admin') ||
-        (path.startsWith('/doctor') && role !== 'doctor') ||
-        (path.startsWith('/patient') && role !== 'patient')
-
-      if (wrongRole) {
-        return redirectWithCookies(new URL(ROLE_HOME[role], request.url), supabaseResponse)
-      }
+    // 로그인 상태로 /login·/forgot-password 접근 → 홈(권한 기반 랜딩)으로
+    if (path === '/login' || path === '/forgot-password') {
+      return redirectWithCookies(new URL('/', request.url), supabaseResponse)
     }
   }
 

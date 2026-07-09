@@ -5,8 +5,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from postgrest.exceptions import APIError as PostgrestAPIError
 
-from core.auth import get_current_user
-from core.database import get_supabase_for_user
+from core.authz import require_permission
+from core.database import get_supabase_admin
+from core.permissions import P
 from models.rooms import RoomCreate, RoomOut, RoomUpdate
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
@@ -42,9 +43,9 @@ def _check_duplicate(client, room_number: str, department_id: str, exclude_id: s
 
 @router.get("", response_model=list[RoomOut])
 def list_rooms(
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_permission(P.DEPARTMENTS_READ))],
 ) -> list[RoomOut]:
-    client = get_supabase_for_user(current_user["token"])
+    client = get_supabase_admin()
     result = (
         client.table("examination_rooms")
         .select(_ROOM_SELECT)
@@ -57,9 +58,9 @@ def list_rooms(
 @router.post("", response_model=RoomOut, status_code=status.HTTP_201_CREATED)
 def create_room(
     body: RoomCreate,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_permission(P.DEPARTMENTS_MANAGE))],
 ) -> RoomOut:
-    client = get_supabase_for_user(current_user["token"])
+    client = get_supabase_admin()
     _check_duplicate(client, body.room_number, str(body.department_id))
     try:
         result = (
@@ -81,9 +82,9 @@ def create_room(
 def update_room(
     room_id: UUID,
     body: RoomUpdate,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_permission(P.DEPARTMENTS_MANAGE))],
 ) -> RoomOut:
-    client = get_supabase_for_user(current_user["token"])
+    client = get_supabase_admin()
     update_data = body.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="수정할 항목이 없습니다")

@@ -1,3 +1,10 @@
+"""진료기록 라우터 — 권한 코드 기반 인가 (Story 10.1, AD-6·AD-10).
+
+접근 판정은 require_permission/require_any_permission + 신컬럼
+(medical_records.patient_user_id / doctor_user_id)으로 일원화한다.
+RLS·역할명 분기·doctors/patients 임베드에 의존하지 않는다.
+응답 필드명은 구 프론트 호환을 위해 그대로 유지한다 (doctor.id = 레거시 doctors.id).
+"""
 from __future__ import annotations
 import ipaddress
 import logging
@@ -7,8 +14,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 
-from core.auth import get_current_user
-from core.database import get_supabase_admin, get_supabase_for_user
+from core.authz import require_any_permission, require_permission
+from core.database import get_supabase_admin
+from core.permissions import P
 from models.medical_records import (
     MedicalRecordCreate,
     MedicalRecordDetail,
@@ -17,19 +25,29 @@ from models.medical_records import (
     MedicalRecordUpdate,
     DoctorInfo,
 )
+from routers.hospital_fields import doctor_display_map
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["medical-records"])
 
-_DOCTOR_JOIN = "doctors!inner(id, user_id, departments!inner(name))"
 _ROOM_JOIN = "examination_rooms(room_number)"
 
-_LIST_SELECT = f"id, visited_at, diagnosis, is_corrected, room_id, {_DOCTOR_JOIN}, {_ROOM_JOIN}"
+# doctor_id는 레거시 doctors.id — 응답 doctor.id 호환용으로만 select한다.
+# TODO(00013): legacy patient_id/doctor_id 제거 시 select·응답 매핑 재검토
+_LIST_SELECT = (
+    "id, visited_at, diagnosis, is_corrected, room_id, "
+    f"doctor_id, doctor_user_id, patient_user_id, {_ROOM_JOIN}"
+)
 
 _DETAIL_SELECT = (
     "id, visited_at, diagnosis, chief_complaint, prescription, "
-    f"is_corrected, correction_note, corrected_at, created_at, room_id, {_DOCTOR_JOIN}, {_ROOM_JOIN}"
+    "is_corrected, correction_note, corrected_at, created_at, room_id, "
+    f"doctor_id, doctor_user_id, patient_user_id, {_ROOM_JOIN}"
+)
+
+_READ_ANY = require_any_permission(
+    P.RECORDS_READ_ALL, P.RECORDS_READ_ASSIGNED, P.RECORDS_READ_OWN
 )
 
 
@@ -58,24 +76,18 @@ def _client_ip(request: Request) -> str | None:
 
 def _log_access(user_id: str, action: str, record_id: str | None, ip: str | None) -> None:
     # 접근 로그는 service_role(admin) 클라이언트로 기록한다.
-    # 유저 토큰 클라이언트는 RLS(access_logs_insert: user_id = auth.uid())에 막혀
-    # 백그라운드 태스크에서 조용히 실패한다. 읽기(access_logs.py)도 admin을 쓰므로 일관됨.
-    payload: dict = {"user_id": user_id, "action": action}
+    # action은 아직 enum('view_list','view_detail') — 확장은 10.2 범위.
+    # resource_type/resource_id를 명시 기록한다 (00012 일반화 컬럼).
+    payload: dict = {"user_id": user_id, "action": action, "resource_type": "medical_record"}
     if record_id:
-        payload["record_id"] = record_id
+        payload["record_id"] = record_id  # TODO(00013): legacy record_id 컬럼 제거 시 삭제
+        payload["resource_id"] = record_id
     if ip:
         payload["ip_address"] = ip
     try:
         get_supabase_admin().table("access_logs").insert(payload).execute()
     except Exception:  # 감사 로그 실패가 본 요청을 깨뜨리지 않도록, 단 조용히 삼키진 않는다
         logger.exception("access_logs 기록 실패 user_id=%s action=%s", user_id, action)
-
-
-def _resolve_doctor_name(client, user_id: str | None) -> str:
-    if not user_id:
-        return ""
-    profiles = client.table("user_profiles").select("name").eq("user_id", user_id).execute()
-    return profiles.data[0]["name"] if profiles.data else ""
 
 
 def _room_number_from_row(row: dict) -> str | None:
@@ -85,57 +97,77 @@ def _room_number_from_row(row: dict) -> str | None:
     return None
 
 
-def _enrich_records(rows: list[dict], client) -> list[MedicalRecordListItem]:
-    if not rows:
-        return []
+def _doctor_info(row: dict, display_map: dict) -> DoctorInfo:
+    display = display_map.get(row.get("doctor_user_id") or "", {})
+    return DoctorInfo(
+        id=row["doctor_id"],  # 레거시 doctors.id — 프론트 호환 유지
+        name=display.get("name", ""),
+        department=display.get("department", ""),
+    )
 
-    user_ids = list({
-        r["doctors"]["user_id"] for r in rows
-        if r.get("doctors") and r["doctors"].get("user_id")
-    })
 
-    if not user_ids:
-        name_map: dict = {}
-    else:
-        profiles = client.table("user_profiles").select("user_id, name").in_("user_id", user_ids).execute()
-        name_map = {p["user_id"]: p["name"] for p in (profiles.data or [])}
+def _to_detail(row: dict, display_map: dict) -> MedicalRecordDetail:
+    return MedicalRecordDetail(
+        id=row["id"],
+        visited_at=row["visited_at"],
+        diagnosis=row["diagnosis"],
+        is_corrected=row["is_corrected"],
+        room_number=_room_number_from_row(row),
+        doctor=_doctor_info(row, display_map),
+        chief_complaint=row.get("chief_complaint"),
+        prescription=row.get("prescription"),
+        correction_note=row.get("correction_note"),
+        corrected_at=row.get("corrected_at"),
+        created_at=row["created_at"],
+    )
 
-    return [
-        MedicalRecordListItem(
-            id=r["id"],
-            visited_at=r["visited_at"],
-            diagnosis=r["diagnosis"],
-            is_corrected=r["is_corrected"],
-            room_number=_room_number_from_row(r),
-            doctor=DoctorInfo(
-                id=r["doctors"]["id"],
-                name=name_map.get(r["doctors"].get("user_id", ""), ""),
-                department=r["doctors"]["departments"]["name"],
-            ),
-        )
-        for r in rows
-        if r.get("doctors") and r["doctors"].get("departments")
-    ]
+
+def _apply_read_scope(query, permissions: frozenset, user_id: str):
+    """권한 보유 조합 → 조회 스코프 필터 (AD-6: 백엔드가 유일한 판정자).
+
+    read_all: 전체 / read_assigned: doctor_user_id == 본인 /
+    read_own: patient_user_id == 본인. 복수 보유 시 OR 확장.
+    """
+    if P.RECORDS_READ_ALL in permissions:
+        return query
+    scopes = []
+    if P.RECORDS_READ_ASSIGNED in permissions:
+        scopes.append(f"doctor_user_id.eq.{user_id}")
+    if P.RECORDS_READ_OWN in permissions:
+        scopes.append(f"patient_user_id.eq.{user_id}")
+    return query.or_(",".join(scopes))
+
+
+def _can_read_record(row: dict, permissions: frozenset, user_id: str) -> bool:
+    if P.RECORDS_READ_ALL in permissions:
+        return True
+    if P.RECORDS_READ_ASSIGNED in permissions and row.get("doctor_user_id") == user_id:
+        return True
+    if P.RECORDS_READ_OWN in permissions and row.get("patient_user_id") == user_id:
+        return True
+    return False
 
 
 @router.get("/medical-records", response_model=MedicalRecordPage)
 def list_medical_records(
     request: Request,
     background_tasks: BackgroundTasks,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(_READ_ANY)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     patient_id: UUID | None = None,
     from_date: date | None = None,
     to_date: date | None = None,
 ) -> MedicalRecordPage:
-    token: str = current_user["token"]
     user_id: str = current_user["sub"]
-    client = get_supabase_for_user(token)
+    permissions: frozenset = current_user["permissions"]
+    admin = get_supabase_admin()
 
-    query = client.table("medical_records").select(_LIST_SELECT, count="exact")
+    query = admin.table("medical_records").select(_LIST_SELECT, count="exact")
+    query = _apply_read_scope(query, permissions, user_id)
 
     if patient_id:
+        # TODO(00013): patient_id 쿼리 파라미터는 레거시 patients.id — 구 프론트 호환 유지
         query = query.eq("patient_id", str(patient_id))
     if from_date:
         query = query.gte("visited_at", from_date.isoformat())
@@ -145,27 +177,36 @@ def list_medical_records(
     offset = (page - 1) * page_size
     result = query.order("visited_at", desc=True).range(offset, offset + page_size - 1).execute()
 
-    # If a patient_id was requested but no records returned, check if patient exists
-    # to return 403 vs empty list for first-visit vs unauthorized access
     rows = result.data or []
     total = result.count or 0
 
-    if patient_id and not rows and total == 0:
-        admin = get_supabase_admin()
-        patient = admin.table("patients").select("id").eq("id", str(patient_id)).execute()
-        if patient.data:
-            # Patient exists — check if they have ANY records
-            any_records = (
-                admin.table("medical_records")
-                .select("id", count="exact")
-                .eq("patient_id", str(patient_id))
-                .limit(1)
-                .execute()
-            )
-            if (any_records.count or 0) > 0:
-                raise HTTPException(status.HTTP_403_FORBIDDEN, "이 환자의 진료기록에 접근할 권한이 없습니다")
+    # patient_id 지정 조회에서 스코프 밖 기록이 존재하면 403 (첫 방문 빈 목록과 구분)
+    if patient_id and not rows and total == 0 and P.RECORDS_READ_ALL not in permissions:
+        any_records = (
+            admin.table("medical_records")
+            .select("id", count="exact")
+            .eq("patient_id", str(patient_id))
+            .limit(1)
+            .execute()
+        )
+        if (any_records.count or 0) > 0:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "이 환자의 진료기록에 접근할 권한이 없습니다")
 
-    items = _enrich_records(rows, client)
+    display_map = doctor_display_map(
+        sorted({r["doctor_user_id"] for r in rows if r.get("doctor_user_id")})
+    )
+    items = [
+        MedicalRecordListItem(
+            id=r["id"],
+            visited_at=r["visited_at"],
+            diagnosis=r["diagnosis"],
+            is_corrected=r["is_corrected"],
+            room_number=_room_number_from_row(r),
+            doctor=_doctor_info(r, display_map),
+        )
+        for r in rows
+    ]
+
     ip = _client_ip(request)
     background_tasks.add_task(_log_access, user_id, "view_list", None, ip)
 
@@ -177,14 +218,14 @@ def get_medical_record(
     record_id: UUID,
     request: Request,
     background_tasks: BackgroundTasks,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(_READ_ANY)],
 ) -> MedicalRecordDetail:
-    token: str = current_user["token"]
     user_id: str = current_user["sub"]
-    client = get_supabase_for_user(token)
+    permissions: frozenset = current_user["permissions"]
 
     result = (
-        client.table("medical_records")
+        get_supabase_admin()
+        .table("medical_records")
         .select(_DETAIL_SELECT)
         .eq("id", str(record_id))
         .execute()
@@ -194,32 +235,18 @@ def get_medical_record(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
     raw = result.data[0]
-    if not raw.get("doctors") or not raw["doctors"].get("departments"):
+    if not _can_read_record(raw, permissions, user_id):
+        # 스코프 밖 기록은 존재 여부를 노출하지 않는다 (구 RLS 동작과 동일하게 404)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    doctor_user_id = raw["doctors"].get("user_id")
-    doctor_name = _resolve_doctor_name(client, doctor_user_id)
+    display_map = doctor_display_map(
+        [raw["doctor_user_id"]] if raw.get("doctor_user_id") else []
+    )
 
     ip = _client_ip(request)
     background_tasks.add_task(_log_access, user_id, "view_detail", str(record_id), ip)
 
-    return MedicalRecordDetail(
-        id=raw["id"],
-        visited_at=raw["visited_at"],
-        diagnosis=raw["diagnosis"],
-        is_corrected=raw["is_corrected"],
-        room_number=_room_number_from_row(raw),
-        doctor=DoctorInfo(
-            id=raw["doctors"]["id"],
-            name=doctor_name,
-            department=raw["doctors"]["departments"]["name"],
-        ),
-        chief_complaint=raw.get("chief_complaint"),
-        prescription=raw.get("prescription"),
-        correction_note=raw.get("correction_note"),
-        corrected_at=raw.get("corrected_at"),
-        created_at=raw["created_at"],
-    )
+    return _to_detail(raw, display_map)
 
 
 @router.post("/medical-records", status_code=201, response_model=MedicalRecordDetail)
@@ -227,28 +254,34 @@ def create_medical_record(
     body: MedicalRecordCreate,
     request: Request,
     background_tasks: BackgroundTasks,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_permission(P.RECORDS_CREATE))],
 ) -> MedicalRecordDetail:
-    token: str = current_user["token"]
     user_id: str = current_user["sub"]
-
-    # Verify patient exists (admin — patient may not have prior records yet)
     admin = get_supabase_admin()
-    patient = admin.table("patients").select("id").eq("id", str(body.patient_id)).execute()
+
+    # TODO(00013): legacy patient_id/doctor_id 제거 — 병행 기간엔 두 컬럼이 NOT NULL이라
+    # patients/doctors에서 역조회해 함께 채운다. 00013 이후 신컬럼만 남긴다.
+    patient = (
+        admin.table("patients")
+        .select("id, user_id")
+        .eq("id", str(body.patient_id))
+        .execute()
+    )
     if not patient.data:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "환자를 찾을 수 없습니다")
+    patient_user_id = patient.data[0]["user_id"]
 
-    client = get_supabase_for_user(token)
-
-    # Get current doctor's row (needs to be doctor to pass RLS)
-    doctor_result = client.table("doctors").select("id").eq("user_id", user_id).execute()
-    if not doctor_result.data:
+    doctor = admin.table("doctors").select("id").eq("user_id", user_id).execute()
+    if not doctor.data:
+        # 병행 기간 한계: records:create 보유자라도 레거시 doctors 행이 없으면 저장 불가
         raise HTTPException(status.HTTP_403_FORBIDDEN, "의사 계정이 아닙니다")
-    doctor_id = doctor_result.data[0]["id"]
+    legacy_doctor_id = doctor.data[0]["id"]
 
     payload: dict = {
-        "patient_id": str(body.patient_id),
-        "doctor_id": doctor_id,
+        "patient_id": str(body.patient_id),   # legacy — TODO(00013) 제거
+        "doctor_id": legacy_doctor_id,        # legacy — TODO(00013) 제거
+        "patient_user_id": patient_user_id,
+        "doctor_user_id": user_id,            # 작성자 본인 자동 설정
         "visited_at": body.visited_at.isoformat(),
         "diagnosis": body.diagnosis,
     }
@@ -260,56 +293,49 @@ def create_medical_record(
         payload["room_id"] = str(body.room_id)
 
     result = (
-        client.table("medical_records")
+        admin.table("medical_records")
         .insert(payload)
         .select(_DETAIL_SELECT)
         .execute()
     )
 
     if not result.data:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "진료기록 저장 권한이 없습니다")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "진료기록 저장에 실패했습니다")
 
     raw = result.data[0]
-    doctor_name = _resolve_doctor_name(client, raw["doctors"].get("user_id"))
+    display_map = doctor_display_map([user_id])
 
     ip = _client_ip(request)
     background_tasks.add_task(_log_access, user_id, "view_detail", raw["id"], ip)
 
-    return MedicalRecordDetail(
-        id=raw["id"],
-        visited_at=raw["visited_at"],
-        diagnosis=raw["diagnosis"],
-        is_corrected=raw["is_corrected"],
-        room_number=_room_number_from_row(raw),
-        doctor=DoctorInfo(
-            id=raw["doctors"]["id"],
-            name=doctor_name,
-            department=raw["doctors"]["departments"]["name"],
-        ),
-        chief_complaint=raw.get("chief_complaint"),
-        prescription=raw.get("prescription"),
-        correction_note=raw.get("correction_note"),
-        corrected_at=raw.get("corrected_at"),
-        created_at=raw["created_at"],
-    )
+    return _to_detail(raw, display_map)
 
 
 @router.patch("/medical-records/{record_id}", response_model=MedicalRecordDetail)
 def update_medical_record(
     record_id: UUID,
     body: MedicalRecordUpdate,
-    current_user: Annotated[dict, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(require_permission(P.RECORDS_UPDATE_OWN))],
 ) -> MedicalRecordDetail:
-    token: str = current_user["token"]
     user_id: str = current_user["sub"]
-    client = get_supabase_for_user(token)
+    admin = get_supabase_admin()
 
     update_data = body.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "변경할 내용이 없습니다")
 
+    existing = (
+        admin.table("medical_records")
+        .select("id, doctor_user_id")
+        .eq("id", str(record_id))
+        .execute()
+    )
+    # 본인(doctor_user_id == sub) 작성 기록만 수정 가능 — 미존재와 동일 메시지(구 동작 유지)
+    if not existing.data or existing.data[0].get("doctor_user_id") != user_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "수정 권한이 없거나 기록을 찾을 수 없습니다")
+
     result = (
-        client.table("medical_records")
+        admin.table("medical_records")
         .update(update_data)
         .eq("id", str(record_id))
         .select(_DETAIL_SELECT)
@@ -317,25 +343,10 @@ def update_medical_record(
     )
 
     if not result.data:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "수정 권한이 없거나 기록을 찾을 수 없습니다")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "수정에 실패했습니다")
 
     raw = result.data[0]
-    doctor_name = _resolve_doctor_name(client, raw["doctors"].get("user_id"))
-
-    return MedicalRecordDetail(
-        id=raw["id"],
-        visited_at=raw["visited_at"],
-        diagnosis=raw["diagnosis"],
-        is_corrected=raw["is_corrected"],
-        room_number=_room_number_from_row(raw),
-        doctor=DoctorInfo(
-            id=raw["doctors"]["id"],
-            name=doctor_name,
-            department=raw["doctors"]["departments"]["name"],
-        ),
-        chief_complaint=raw.get("chief_complaint"),
-        prescription=raw.get("prescription"),
-        correction_note=raw.get("correction_note"),
-        corrected_at=raw.get("corrected_at"),
-        created_at=raw["created_at"],
+    display_map = doctor_display_map(
+        [raw["doctor_user_id"]] if raw.get("doctor_user_id") else []
     )
+    return _to_detail(raw, display_map)

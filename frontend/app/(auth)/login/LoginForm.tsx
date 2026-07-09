@@ -5,12 +5,6 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import styles from './LoginForm.module.css'
 
-const ROLE_HOME: Record<string, string> = {
-  admin: '/admin',
-  doctor: '/doctor',
-  patient: '/patient',
-}
-
 interface LoginFormProps {
   expired?: boolean
 }
@@ -39,15 +33,8 @@ export default function LoginForm({ expired }: LoginFormProps) {
       return
     }
 
-    const res = await fetch('/api/auth/me')
-    if (!res.ok) {
-      setError('사용자 정보를 불러오는 데 실패했습니다')
-      setLoading(false)
-      return
-    }
-
-    const { role } = await res.json()
-    router.push(ROLE_HOME[role] ?? '/')
+    // 역할 분기 없음 (Story 9.1) — 랜딩(/)이 permissions 기준 첫 허용 메뉴로 보낸다
+    router.push('/')
   }
 
   return (

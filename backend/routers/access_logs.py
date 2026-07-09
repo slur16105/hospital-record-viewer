@@ -4,11 +4,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from core.auth import require_admin
+from core.authz import require_permission
 from core.database import get_supabase_admin
+from core.permissions import P
 from models.access_logs import AccessLogOut, AccessLogPage
 
-router = APIRouter(prefix="/access-logs", tags=["access-logs"], dependencies=[Depends(require_admin)])
+# Story 10.1: require_admin(역할명 판정) → logs:read 권한 선언 (AD-6·AD-10)
+router = APIRouter(
+    prefix="/access-logs",
+    tags=["access-logs"],
+    dependencies=[Depends(require_permission(P.LOGS_READ))],
+)
 
 
 @router.get("", response_model=AccessLogPage)
@@ -44,20 +50,27 @@ def list_access_logs(
         profiles = admin.table("user_profiles").select("user_id, name").in_("user_id", user_ids).execute()
         name_map = {p["user_id"]: p["name"] for p in (profiles.data or [])}
 
+    # 환자 이름은 신컬럼(patient_user_id) → user_profiles로 해석 (!inner 임베드 의존 제거)
     patient_map: dict = {}
     if record_ids:
         records = (
             admin.table("medical_records")
-            .select("id, patients!inner(user_id, user_profiles!inner(name))")
+            .select("id, patient_user_id")
             .in_("id", record_ids)
             .execute()
-        )
-        for rec in (records.data or []):
-            try:
-                pname = rec["patients"]["user_profiles"]["name"]
-            except (KeyError, TypeError):
-                pname = ""
-            patient_map[rec["id"]] = pname
+        ).data or []
+        patient_user_ids = list({r["patient_user_id"] for r in records if r.get("patient_user_id")})
+        pname_map: dict = {}
+        if patient_user_ids:
+            rows2 = (
+                admin.table("user_profiles")
+                .select("user_id, name")
+                .in_("user_id", patient_user_ids)
+                .execute()
+            ).data or []
+            pname_map = {p["user_id"]: p["name"] for p in rows2}
+        for rec in records:
+            patient_map[rec["id"]] = pname_map.get(rec.get("patient_user_id"), "")
 
     items = [
         AccessLogOut(
