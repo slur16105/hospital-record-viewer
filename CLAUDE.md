@@ -73,7 +73,7 @@ python scripts/seed.py            # backend/.env 의 SERVICE_ROLE 키 사용
 
 1. **JWT는 ES256(비대칭/JWKS)이다, HS256 아님.** Supabase가 비대칭 서명키로 마이그레이션됨. `backend/core/auth.py`는 JWKS 공개키(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`)로 검증하고 HS256은 레거시 폴백으로만 둔다. "유효 토큰이 전부 401" 증상이면 이 검증 경로부터 의심할 것. (회귀 테스트: `tests/test_auth.py`)
 
-2. **레거시 병존 기간(00013 적용 전).** 구 `doctors`/`patients` 테이블·`user_profiles.role` enum·`medical_records.patient_id/doctor_id`가 아직 남아 있고 NOT NULL이라, 진료기록 INSERT 등 일부 경로가 레거시 컬럼을 병행 기입한다 — 코드의 `TODO(00013)` 주석 지점. `supabase/migrations/00013_rbac_drop_legacy.sql`(파괴적)은 작성만 된 상태로 **Slur 승인 게이트** 뒤에 적용한다. 적용 전 반드시 TODO(00013) 코드 정리 배포 + `scripts/verify_rbac_migration.py` 통과 확인.
+2. **레거시 스키마는 완전히 제거됐다 (00013 적용 완료, 2026-07-09).** `doctors`/`patients` 테이블·`user_profiles.role` enum은 더 이상 존재하지 않는다 — 역할은 `user_roles`, 역할별 데이터는 `role_fields`+`profile_field_values`, 진료기록 연결은 `patient_user_id`/`doctor_user_id`. **환자/의사 식별자는 전부 auth user_id다** (API 응답의 id 포함). 구 RLS 정책·헬퍼 함수(is_admin 등)도 제거됨 — RLS는 ENABLE 상태로 anon 차단만 하고, 인가는 백엔드가 전담.
 
 3. **Next.js 16 — 알던 Next가 아니다.** `frontend/AGENTS.md` 경고대로 API·관례·파일 구조가 다를 수 있다. 미들웨어 파일이 `middleware.ts`가 아니라 **`proxy.ts`**다. 코드 작성 전 `node_modules/next/dist/docs/`의 해당 가이드를 확인할 것.
 

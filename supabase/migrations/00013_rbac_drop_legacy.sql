@@ -1,16 +1,10 @@
 -- ============================================================
 -- Migration 00013: 레거시 스키마 제거 (파괴적) — ⛔ 적용 게이트 있음
 -- ============================================================
--- ⚠️⚠️ 이 파일은 Story 6.1에서 "작성만" 된 것이다. ⚠️⚠️
---
--- 적용 조건 (전부 충족 후에만):
---   1. Epic 9 (프론트 기능 URL 재편) 배포 완료
---   2. Epic 10.1 (백엔드 API 권한 전환 — patient_id/doctor_id 참조 제거) 배포 완료
---   3. scripts/verify_rbac_migration.py 전 항목 PASS를 사람이 확인
---   4. Slur 승인 (Sprint Change Proposal 2026-07-09 게이트)
---
--- 이 시점 전에 적용하면 운영 중인 백엔드·프론트가 즉시 파손된다
--- (user_profiles.role, doctors, patients를 아직 읽고 있음).
+-- ✅ 2026-07-09 운영 적용 완료 (게이트 전부 통과):
+--   1. Epic 9·10 배포 ✅  2. TODO(00013) 코드 정리 배포 ✅
+--   3. verify 전 항목 PASS ✅  4. 배포 통합테스트 214 passed ✅  5. Slur 승인 ✅
+-- 적용 순서: 00016(레거시 NOT NULL 해제) → 코드 배포 → 본 파일.
 -- ============================================================
 
 ------------------------------------------------------------
@@ -67,7 +61,17 @@ DROP POLICY IF EXISTS medical_records_insert ON medical_records;
 DROP POLICY IF EXISTS medical_records_update ON medical_records;
 DROP POLICY IF EXISTS access_logs_select     ON access_logs;
 DROP POLICY IF EXISTS access_logs_insert     ON access_logs;
--- doctors/patients 정책은 테이블 DROP과 함께 제거됨
+-- patients_select 정책이 medical_records.patient_id를 참조 → 컬럼 제거 전 명시 DROP 필요
+DROP POLICY IF EXISTS patients_select        ON patients;
+DROP POLICY IF EXISTS patients_insert        ON patients;
+DROP POLICY IF EXISTS patients_update        ON patients;
+DROP POLICY IF EXISTS doctors_select         ON doctors;
+DROP POLICY IF EXISTS doctors_insert         ON doctors;
+DROP POLICY IF EXISTS doctors_update         ON doctors;
+-- examination_rooms 정책(00007)이 is_admin()에 의존 → 함수 제거 전 명시 DROP 필요
+DROP POLICY IF EXISTS examination_rooms_select ON examination_rooms;
+DROP POLICY IF EXISTS examination_rooms_insert ON examination_rooms;
+DROP POLICY IF EXISTS examination_rooms_update ON examination_rooms;
 
 ------------------------------------------------------------
 -- 3. 구 컬럼 제거
