@@ -23,6 +23,7 @@ def list_access_logs(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     from_date: date | None = None,
     to_date: date | None = None,
+    resource_type: Annotated[str | None, Query(max_length=50)] = None,
 ) -> AccessLogPage:
     admin = get_supabase_admin()
 
@@ -35,6 +36,8 @@ def list_access_logs(
         query = query.gte("created_at", from_date.isoformat())
     if to_date:
         query = query.lt("created_at", f"{to_date.isoformat()}T23:59:59")
+    if resource_type:
+        query = query.eq("resource_type", resource_type)
 
     offset = (page - 1) * page_size
     result = query.range(offset, offset + page_size - 1).execute()

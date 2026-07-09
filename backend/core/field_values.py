@@ -351,6 +351,17 @@ def search_users_by_field(
         column = FIELD_TYPE_COLUMNS.get(field["field_type"])
         if column not in _SEARCHABLE_COLUMNS:
             continue  # boolean/json은 검색 인덱스 대상이 아님
+        if column == "value_date":
+            # 날짜 컬럼에 비날짜 검색어를 eq하면 Postgres 타입 오류(500) — 건너뜀
+            try:
+                date.fromisoformat(str(value))
+            except ValueError:
+                continue
+        elif column == "value_number" and not isinstance(value, (int, float)):
+            try:
+                float(str(value))
+            except ValueError:
+                continue
         value_query = (
             client.table("profile_field_values")
             .select("user_id")

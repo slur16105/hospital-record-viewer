@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Seed script for hospital-record-viewer demo data.
+Seed script for hospital-record-viewer demo data (RBAC v3).
 
 Requirements:
   pip install supabase python-dotenv  (or run from backend venv)
@@ -11,11 +11,19 @@ Usage:
 
 Environment variables are read from backend/.env
 (or set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY directly).
+
+What it creates (idempotent — safe to re-run):
+  - departments / examination_rooms (fixed UUIDs / natural-key lookup)
+  - auth accounts + user_profiles (admin 1, doctors 10, patients 20, staff 1)
+  - user_roles       — primary role per account (00011 fixed role UUIDs)
+  - profile_field_values — doctor license/department, patient birth_date/phone
+                           (00011 fixed role_fields UUIDs, typed EAV)
+  - legacy doctors/patients rows + user_profiles.role  # TODO(00013): drop
+  - medical_records with explicit patient_user_id/doctor_user_id (no trigger reliance)
 """
 
 import os
 import sys
-import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -49,6 +57,20 @@ except ImportError:
     sys.exit(1)
 
 admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+# ---------------------------------------------------------------------------
+# RBAC fixed UUIDs — must match supabase/migrations/00011_rbac_seed.sql
+# (and backend/core/permissions.py ROLE_* constants)
+# ---------------------------------------------------------------------------
+ROLE_ADMIN_ID = "a0000000-0000-0000-0000-000000000001"   # 관리자 (is_system)
+ROLE_DOCTOR_ID = "a0000000-0000-0000-0000-000000000002"  # 의사
+ROLE_PATIENT_ID = "a0000000-0000-0000-0000-000000000003" # 환자
+ROLE_STAFF_ID = "a0000000-0000-0000-0000-000000000004"   # 원무과
+
+FIELD_DOCTOR_LICENSE_ID = "c0000000-0000-0000-0000-000000000001"   # text
+FIELD_DOCTOR_DEPARTMENT_ID = "c0000000-0000-0000-0000-000000000002"  # reference→departments
+FIELD_PATIENT_BIRTH_DATE_ID = "c0000000-0000-0000-0000-000000000003"  # date
+FIELD_PATIENT_PHONE_ID = "c0000000-0000-0000-0000-000000000004"       # phone(text)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -103,6 +125,11 @@ PATIENTS = [
     ("patient18@hospital.test", "백준서", "1974-09-03", "010-1234-0018"),
     ("patient19@hospital.test", "신하린", "1999-04-17", "010-1234-0019"),
     ("patient20@hospital.test", "안도영", "1960-12-29", "010-1234-0020"),
+]
+
+# 원무과 데모 계정 — 진료기록 권한 없음, 역할별 입력필드 없음
+STAFF = [
+    ("staff01@hospital.test", "한사랑"),
 ]
 
 DIAGNOSES = [
@@ -173,6 +200,41 @@ def get_or_create_user(email: str, password: str, existing: dict[str, str]) -> s
     return user_id
 
 
+def upsert_profile(user_id: str, name: str, legacy_role: str) -> None:
+    # TODO(00013): user_profiles.role(user_role enum)은 레거시 NOT NULL 컬럼 —
+    # RBAC 판정에는 미사용(판정은 user_roles/role_permissions). 00013 적용 시
+    # legacy_role 인자와 "role" 키를 함께 제거할 것.
+    admin.table("user_profiles").upsert(
+        {"user_id": user_id, "role": legacy_role, "name": name, "must_change_password": False},
+        on_conflict="user_id",
+    ).execute()
+
+
+def assign_role(user_id: str, role_id: str, is_primary: bool = True) -> None:
+    """user_roles 멱등 부여 (PK user_id,role_id upsert)."""
+    admin.table("user_roles").upsert(
+        {"user_id": user_id, "role_id": role_id, "is_primary": is_primary},
+        on_conflict="user_id,role_id",
+    ).execute()
+
+
+def upsert_field_value(user_id: str, role_field_id: str, column: str, value) -> None:
+    """profile_field_values 멱등 upsert — typed EAV: 해당 value_* 하나만 채움."""
+    row = {
+        "user_id": user_id,
+        "role_field_id": role_field_id,
+        "value_text": None,
+        "value_number": None,
+        "value_date": None,
+        "value_boolean": None,
+        "value_json": None,
+    }
+    row[column] = value
+    admin.table("profile_field_values").upsert(
+        row, on_conflict="user_id,role_field_id"
+    ).execute()
+
+
 def now_minus(days: int, hours: int = 0) -> str:
     dt = datetime.now(timezone.utc) - timedelta(days=days, hours=hours)
     return dt.isoformat()
@@ -183,7 +245,7 @@ def now_minus(days: int, hours: int = 0) -> str:
 # ---------------------------------------------------------------------------
 
 def seed_departments():
-    print("\n[1/6] Departments")
+    print("\n[1/7] Departments")
     for name, dept_id in DEPT_IDS.items():
         admin.table("departments").upsert(
             {"id": dept_id, "name": name, "is_active": True},
@@ -194,7 +256,7 @@ def seed_departments():
 
 def seed_rooms() -> dict[str, str]:
     """Return {(dept_name, room_number): room_id}"""
-    print("\n[2/6] Examination Rooms")
+    print("\n[2/7] Examination Rooms")
     room_map: dict[str, str] = {}
     for dept_name, room_number in ROOMS:
         dept_id = DEPT_IDS[dept_name]
@@ -221,30 +283,43 @@ def seed_rooms() -> dict[str, str]:
 
 
 def seed_admin(existing: dict[str, str]) -> str:
-    print("\n[3/6] Admin account")
-    admin_email = "admin@hospital.test"
-    user_id = get_or_create_user(admin_email, "Admin123!", existing)
-    admin.table("user_profiles").upsert(
-        {"user_id": user_id, "role": "admin", "name": "관리자", "must_change_password": False},
-        on_conflict="user_id",
-    ).execute()
+    print("\n[3/7] Admin account")
+    user_id = get_or_create_user("admin@hospital.test", "Admin123!", existing)
+    upsert_profile(user_id, "관리자", "admin")
+    assign_role(user_id, ROLE_ADMIN_ID)
     return user_id
+
+
+def seed_staff(existing: dict[str, str]) -> list[str]:
+    print("\n[4/7] Staff (원무과) accounts")
+    user_ids = []
+    for email, name in STAFF:
+        user_id = get_or_create_user(email, "Staff123!", existing)
+        # TODO(00013): 레거시 user_role enum('admin','doctor','patient')에 원무과가
+        # 없어 'patient'를 필러로 사용 (users.py _LEGACY_ROLE_BY_ID 폴백과 동일).
+        # 실제 권한은 user_roles의 원무과 역할이 결정한다.
+        upsert_profile(user_id, name, "patient")
+        assign_role(user_id, ROLE_STAFF_ID)
+        user_ids.append(user_id)
+    return user_ids
 
 
 def seed_doctors(existing: dict[str, str]) -> list[dict]:
     """Return list of {user_id, doctor_id, dept_name, email}"""
-    print("\n[4/6] Doctor accounts")
+    print("\n[5/7] Doctor accounts")
     doctor_rows = []
     for email, name, dept_name, license_number in DOCTORS:
         user_id = get_or_create_user(email, "Doctor123!", existing)
         dept_id = DEPT_IDS[dept_name]
 
-        admin.table("user_profiles").upsert(
-            {"user_id": user_id, "role": "doctor", "name": name, "must_change_password": False},
-            on_conflict="user_id",
-        ).execute()
+        upsert_profile(user_id, name, "doctor")
+        assign_role(user_id, ROLE_DOCTOR_ID)
 
-        # Get or create doctor row
+        # RBAC v3 필드값 (00011 role_fields 고정 UUID)
+        upsert_field_value(user_id, FIELD_DOCTOR_LICENSE_ID, "value_text", license_number)
+        upsert_field_value(user_id, FIELD_DOCTOR_DEPARTMENT_ID, "value_text", dept_id)
+
+        # TODO(00013): 레거시 doctors 테이블 — 00013 적용 전까지 병존, 이후 블록 제거
         existing_doctor = (
             admin.table("doctors").select("id").eq("user_id", user_id).execute()
         )
@@ -269,16 +344,19 @@ def seed_doctors(existing: dict[str, str]) -> list[dict]:
 
 def seed_patients(existing: dict[str, str]) -> list[dict]:
     """Return list of {user_id, patient_id, email}"""
-    print("\n[5/6] Patient accounts")
+    print("\n[6/7] Patient accounts")
     patient_rows = []
     for email, name, birth_date, phone in PATIENTS:
         user_id = get_or_create_user(email, "Patient123!", existing)
 
-        admin.table("user_profiles").upsert(
-            {"user_id": user_id, "role": "patient", "name": name, "must_change_password": False},
-            on_conflict="user_id",
-        ).execute()
+        upsert_profile(user_id, name, "patient")
+        assign_role(user_id, ROLE_PATIENT_ID)
 
+        # RBAC v3 필드값 (00011 role_fields 고정 UUID)
+        upsert_field_value(user_id, FIELD_PATIENT_BIRTH_DATE_ID, "value_date", birth_date)
+        upsert_field_value(user_id, FIELD_PATIENT_PHONE_ID, "value_text", phone)
+
+        # TODO(00013): 레거시 patients 테이블 — 00013 적용 전까지 병존, 이후 블록 제거
         existing_patient = (
             admin.table("patients").select("id").eq("user_id", user_id).execute()
         )
@@ -301,9 +379,9 @@ def seed_medical_records(
     patient_rows: list[dict],
     room_map: dict[str, str],
 ):
-    print("\n[6/6] Medical records")
+    print("\n[7/7] Medical records")
 
-    # Check existing count
+    # Check existing count (멱등 가드 — 이미 시드됐으면 건너뜀)
     existing = admin.table("medical_records").select("id", count="exact").execute()
     if (existing.count or 0) >= 50:
         print(f"  skip — {existing.count} records already exist")
@@ -332,6 +410,10 @@ def seed_medical_records(
                 room_id = dept_rooms[visit % len(dept_rooms)] if dept_rooms else None
 
                 record: dict = {
+                    # 신컬럼 (RBAC v3) — 트리거 백필에 의존하지 않고 명시 기입
+                    "patient_user_id": patient["user_id"],
+                    "doctor_user_id": doctor["user_id"],
+                    # TODO(00013): 레거시 FK — 00013 적용 시 아래 두 키 제거
                     "patient_id": patient["patient_id"],
                     "doctor_id": doctor["doctor_id"],
                     "visited_at": now_minus(offset_days, hours=visit * 3),
@@ -362,7 +444,7 @@ def seed_medical_records(
 
 def main():
     print("=" * 50)
-    print("Hospital Record Viewer — Seed Script")
+    print("Hospital Record Viewer — Seed Script (RBAC v3)")
     print("=" * 50)
     print(f"Supabase: {SUPABASE_URL}")
 
@@ -372,6 +454,7 @@ def main():
     seed_departments()
     room_map = seed_rooms()
     seed_admin(existing_users)
+    seed_staff(existing_users)
     doctor_rows = seed_doctors(existing_users)
     patient_rows = seed_patients(existing_users)
     seed_medical_records(doctor_rows, patient_rows, room_map)
@@ -381,6 +464,7 @@ def main():
     print()
     print("Test accounts:")
     print("  Admin:   admin@hospital.test    / Admin123!")
+    print("  Staff:   staff01@hospital.test  / Staff123!")
     print("  Doctor:  doctor01@hospital.test / Doctor123!")
     print("  Patient: patient01@hospital.test/ Patient123!")
     print("=" * 50)

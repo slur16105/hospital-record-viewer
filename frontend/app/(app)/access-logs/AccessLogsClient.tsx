@@ -23,10 +23,18 @@ interface AccessLogPage {
   page_size: number
 }
 
+// 알려진 액션만 한글 라벨 — 그 외 액션은 원문 문자열 그대로 표시 (enum 2종 가정 없음)
 const ACTION_LABELS: Record<string, string> = {
   view_list: '목록 조회',
   view_detail: '상세 조회',
+  role_change: '역할 변경',
 }
+
+const RESOURCE_TYPE_OPTIONS = [
+  { value: '', label: '전체' },
+  { value: 'medical_record', label: '진료기록' },
+  { value: 'user', label: '사용자' },
+]
 
 function formatDatetime(iso: string): string {
   const d = new Date(iso)
@@ -43,12 +51,14 @@ function formatDatetime(iso: string): string {
 export default function AccessLogsClient() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [resourceType, setResourceType] = useState('')
   const [appliedFrom, setAppliedFrom] = useState('')
   const [appliedTo, setAppliedTo] = useState('')
+  const [appliedResourceType, setAppliedResourceType] = useState('')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 20
 
-  const queryKey = ['access-logs', appliedFrom, appliedTo, page]
+  const queryKey = ['access-logs', appliedFrom, appliedTo, appliedResourceType, page]
 
   const { data, isLoading, error } = useQuery<AccessLogPage>({
     queryKey,
@@ -58,6 +68,7 @@ export default function AccessLogsClient() {
       params.set('page_size', String(PAGE_SIZE))
       if (appliedFrom) params.set('from_date', appliedFrom)
       if (appliedTo) params.set('to_date', appliedTo)
+      if (appliedResourceType) params.set('resource_type', appliedResourceType)
       const res = await fetch(`/api/access-logs?${params.toString()}`)
       if (res.status === 403) throw Object.assign(new Error('forbidden'), { status: 403 })
       if (!res.ok) throw new Error('접근 로그 조회 실패')
@@ -75,14 +86,17 @@ export default function AccessLogsClient() {
   function handleSearch() {
     setAppliedFrom(fromDate)
     setAppliedTo(toDate)
+    setAppliedResourceType(resourceType)
     setPage(1)
   }
 
   function handleReset() {
     setFromDate('')
     setToDate('')
+    setResourceType('')
     setAppliedFrom('')
     setAppliedTo('')
+    setAppliedResourceType('')
     setPage(1)
   }
 
@@ -112,6 +126,20 @@ export default function AccessLogsClient() {
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
           />
+        </div>
+        <div className={styles.filterGroup}>
+          <label className={styles.filterLabel}>대상 유형</label>
+          <select
+            className={styles.filterInput}
+            value={resourceType}
+            onChange={(e) => setResourceType(e.target.value)}
+          >
+            {RESOURCE_TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
         <button className={styles.btnSearch} onClick={handleSearch}>
           조회
