@@ -87,6 +87,8 @@ erDiagram
 
 상세 스키마: [`docs/dbdiagram-import.dbml`](docs/dbdiagram-import.dbml)
 
+> ERD는 [dbdiagram.io](https://dbdiagram.io)에서 다이어그램으로 시각화·검증하며 설계했습니다. 위 `.dbml` 파일을 dbdiagram.io에 임포트하면 동일한 다이어그램을 확인할 수 있습니다.
+
 ---
 
 ## 로컬 실행
