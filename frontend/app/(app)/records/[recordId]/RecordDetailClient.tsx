@@ -14,6 +14,7 @@ interface DoctorInfo {
 
 interface RecordDetail {
   id: string
+  patient_name: string | null
   visited_at: string
   diagnosis: string
   chief_complaint: string | null
@@ -154,6 +155,12 @@ export default function RecordDetailClient({
 
       {!editing ? (
         <div className={styles.card}>
+          {record.patient_name && (
+            <div className={styles.fieldRow}>
+              <span className={styles.fieldLabel}>환자명</span>
+              <span className={styles.fieldValue}>{record.patient_name}</span>
+            </div>
+          )}
           <div className={styles.fieldRow}>
             <span className={styles.fieldLabel}>진료일시</span>
             <span className={styles.fieldValue}>{formatDatetime(record.visited_at)}</span>

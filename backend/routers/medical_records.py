@@ -25,7 +25,7 @@ from models.medical_records import (
     MedicalRecordUpdate,
     DoctorInfo,
 )
-from routers.hospital_fields import doctor_display_map
+from routers.hospital_fields import doctor_display_map, profile_name_map
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +107,13 @@ def _doctor_info(row: dict, display_map: dict) -> DoctorInfo:
 
 
 def _to_detail(row: dict, display_map: dict) -> MedicalRecordDetail:
+    patient_user_id = row.get("patient_user_id")
+    patient_name = (
+        profile_name_map([patient_user_id]).get(patient_user_id) if patient_user_id else None
+    )
     return MedicalRecordDetail(
         id=row["id"],
+        patient_name=patient_name,
         visited_at=row["visited_at"],
         diagnosis=row["diagnosis"],
         is_corrected=row["is_corrected"],

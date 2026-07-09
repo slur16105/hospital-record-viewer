@@ -20,6 +20,7 @@ class MedicalRecordListItem(BaseModel):
 
 
 class MedicalRecordDetail(MedicalRecordListItem):
+    patient_name: str | None = None  # 통합 /records/[id] 화면용 — user_profiles.name
     chief_complaint: str | None = None
     prescription: str | None = None
     correction_note: str | None = None
