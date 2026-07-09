@@ -1,3 +1,14 @@
+/* SLUR Design System — tokens (semantic 토큰만 사용, --color-*-숫자 직접 참조 금지) */
+@import "./tokens/fonts.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/spacing.css";
+@import "./tokens/radius.css";
+@import "./tokens/shadows.css";
+@import "./tokens/motion.css";
+@import "./tokens/z-index.css";
+@import "./tokens/breakpoints.css";
+
 /* CSS Reset */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -12,11 +23,11 @@ html {
 
 body {
   min-height: 100%;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: #171717;
-  background: #ffffff;
+  color: var(--color-text-primary);
+  background: var(--color-surface-page);
 }
 
 a {

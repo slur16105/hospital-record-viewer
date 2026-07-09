@@ -3,133 +3,147 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f5f5f5;
-  padding: 1rem;
+  background-color: var(--color-surface-sunken);
+  padding: var(--space-16);
 }
 
 .card {
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  padding: 2rem;
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-8);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-32);
   width: 100%;
   max-width: 400px;
 }
 
 .title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin-bottom: 0.25rem;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-4);
   text-align: center;
 }
 
 .subtitle {
-  font-size: 0.875rem;
-  color: #666;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
   text-align: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-24);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-16);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: var(--space-8);
 }
 
 .label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #333;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
 }
 
 .input {
   width: 100%;
-  padding: 0.625rem 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  font-size: 1rem;
-  color: #1a1a1a;
-  background: #fff;
-  transition: border-color 0.15s;
+  height: 40px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-8);
+  font-size: var(--text-base);
+  color: var(--color-text-primary);
+  background: var(--color-surface-card);
+  transition: border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
 }
 
-.input:focus {
+.input:focus-visible {
   outline: none;
-  border-color: #2563eb;
+  border-color: var(--color-border-focus);
+  box-shadow: var(--color-focus-ring);
 }
 
 .input:disabled {
-  background: #f9fafb;
-  color: #9ca3af;
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
   cursor: not-allowed;
 }
 
 .error {
-  font-size: 0.875rem;
-  color: #dc2626;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 4px;
-  padding: 0.5rem 0.75rem;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  border-radius: var(--radius-8);
+  padding: var(--space-8) var(--space-12);
 }
 
 .button {
   width: 100%;
-  padding: 0.75rem;
-  background-color: #2563eb;
-  color: #fff;
-  border-radius: 4px;
-  font-size: 1rem;
-  font-weight: 500;
-  transition: background-color 0.15s;
-  margin-top: 0.5rem;
+  height: 40px;
+  padding: 0 var(--space-16);
+  background-color: var(--color-brand);
+  color: var(--color-on-brand);
+  border-radius: var(--radius-8);
+  box-shadow: var(--shadow-xs);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  transition: background-color var(--duration-fast) var(--ease-standard);
+  margin-top: var(--space-8);
 }
 
 .button:hover:not(:disabled) {
-  background-color: #1d4ed8;
+  background-color: var(--color-brand-hover);
+}
+
+.button:active:not(:disabled) {
+  background-color: var(--color-brand-active);
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--color-focus-ring);
 }
 
 .button:disabled {
-  background-color: #93c5fd;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .registerLink {
-  margin-top: 1.25rem;
+  margin-top: var(--space-20);
   text-align: center;
-  font-size: 0.875rem;
-  color: #666;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
 }
 
 .registerLink a {
-  color: #2563eb;
+  color: var(--color-text-link);
   text-decoration: underline;
 }
 
 .forgotLink {
-  margin-top: 0.5rem;
+  margin-top: var(--space-8);
   text-align: center;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
 }
 
 .forgotLink a {
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-decoration: underline;
 }
 
 .expiredBanner {
-  font-size: 0.875rem;
-  color: #92400e;
-  background: #fffbeb;
-  border: 1px solid #fcd34d;
-  border-radius: 4px;
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 0.5rem;
+  font-size: var(--text-sm);
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+  border-radius: var(--radius-8);
+  padding: var(--space-8) var(--space-12);
+  margin-bottom: var(--space-8);
 }

@@ -7,10 +7,10 @@ export default function ForbiddenNotice({ message }: { message?: string }) {
   return (
     <div style={{ maxWidth: 480, margin: '4rem auto', textAlign: 'center' }}>
       <h1 style={{ fontSize: '1.25rem', marginBottom: '0.75rem' }}>접근 권한이 없습니다</h1>
-      <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
+      <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>
         {message ?? '이 화면을 볼 수 있는 권한이 없습니다. 필요하다면 관리자에게 문의하세요.'}
       </p>
-      <Link href="/" style={{ color: '#1e40af' }}>
+      <Link href="/" style={{ color: 'var(--color-text-link)' }}>
         홈으로 돌아가기
       </Link>
     </div>

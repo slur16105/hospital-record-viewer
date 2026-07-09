@@ -1,0 +1,8 @@
+/* RADIUS — token name = pixel value. --radius-8 is the default for cards/inputs. */
+:root {
+  --radius-0:    0;
+  --radius-4:    0.25rem;
+  --radius-8:    0.5rem;
+  --radius-12:   0.75rem;
+  --radius-full: 9999px;
+}

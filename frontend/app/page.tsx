@@ -26,11 +26,11 @@ export default function Home() {
 
   if (!isLoading && !isError && !target) {
     return (
-      <p style={{ textAlign: 'center', marginTop: '4rem', color: '#6b7280' }}>
+      <p style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--color-text-muted)' }}>
         접근 가능한 메뉴가 없습니다. 관리자에게 문의하세요.
       </p>
     )
   }
 
-  return <p style={{ textAlign: 'center', marginTop: '4rem', color: '#6b7280' }}>이동 중...</p>
+  return <p style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--color-text-muted)' }}>이동 중...</p>
 }
