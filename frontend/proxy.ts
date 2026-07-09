@@ -34,10 +34,13 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const path = request.nextUrl.pathname
+  // 노코드 관리 화면(Epic 7·8) — /admin과 동일하게 admin 전용 취급
+  const isAdminManagedPath = path.startsWith('/roles') || path.startsWith('/users')
   const isProtectedPath =
     path.startsWith('/admin') ||
     path.startsWith('/doctor') ||
     path.startsWith('/patient') ||
+    isAdminManagedPath ||
     path === '/change-password'
   const isAuthPath = path === '/login' || path === '/forgot-password'
 
@@ -86,7 +89,7 @@ export async function proxy(request: NextRequest) {
     // 역할 불일치 시 → 자신의 역할 홈으로 리다이렉트
     if (role && ROLE_HOME[role]) {
       const wrongRole =
-        (path.startsWith('/admin') && role !== 'admin') ||
+        ((path.startsWith('/admin') || isAdminManagedPath) && role !== 'admin') ||
         (path.startsWith('/doctor') && role !== 'doctor') ||
         (path.startsWith('/patient') && role !== 'patient')
 

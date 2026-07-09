@@ -1,0 +1,293 @@
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.breadcrumb {
+  margin-bottom: 1rem;
+}
+
+.backLink {
+  font-size: 0.875rem;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+  color: #1a1a1a;
+}
+
+.systemBadge {
+  padding: 0.125rem 0.5rem;
+  background-color: #ede9fe;
+  color: #5b21b6;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.active {
+  padding: 0.125rem 0.5rem;
+  background-color: #dcfce7;
+  color: #166534;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.inactive {
+  padding: 0.125rem 0.5rem;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 1.25rem;
+}
+
+.tab,
+.tabActive {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #6b7280;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.tabActive {
+  color: #2563eb;
+  font-weight: 600;
+  border-bottom-color: #2563eb;
+}
+
+.tab:hover {
+  color: #1f2937;
+}
+
+.section {
+  margin-bottom: 2rem;
+}
+
+.lockedNotice {
+  padding: 0.625rem 0.875rem;
+  background-color: #fef9c3;
+  color: #854d0e;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  margin-bottom: 1rem;
+}
+
+.infoForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  max-width: 480px;
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  outline: none;
+}
+
+.input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.input:disabled {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.flag {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  cursor: pointer;
+}
+
+.meta {
+  margin-top: 1rem;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.error {
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.permCategory {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.permCategoryHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.permCategoryName {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.permList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding-left: 1.5rem;
+}
+
+.permItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  cursor: pointer;
+}
+
+.permCode {
+  font-size: 0.6875rem;
+  color: #6b7280;
+  background-color: #f3f4f6;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.th {
+  text-align: left;
+  padding: 0.625rem 0.75rem;
+  background-color: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.tr:hover {
+  background-color: #f9fafb;
+}
+
+.td {
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.8125rem;
+  color: #1f2937;
+}
+
+.btnPrimary {
+  padding: 0.5rem 1rem;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btnSmall {
+  padding: 0.25rem 0.625rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-right: 0.25rem;
+  background-color: white;
+}
+
+.btnSmall:hover:not(:disabled) {
+  background-color: #f3f4f6;
+}
+
+.btnSmall:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.previewNotice {
+  padding: 0.625rem 0.875rem;
+  background-color: #eff6ff;
+  color: #1e40af;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  margin-bottom: 1rem;
+}
+
+.previewActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.loading {
+  text-align: center;
+  color: #6b7280;
+  padding: 2rem;
+}
+
+.empty {
+  text-align: center;
+  color: #6b7280;
+  padding: 1.5rem;
+  font-size: 0.875rem;
+}

@@ -70,6 +70,16 @@ def invalidate_user_permissions(user_id: str) -> None:
         _cache.pop(str(user_id), None)
 
 
+def invalidate_all_permissions() -> None:
+    """역할↔권한 조합 변경 직후 호출 — 전체 캐시를 무효화한다 (7.3).
+
+    역할 보유자 목록 조회 없이 단순 전체 클리어. 캐시는 60초 TTL이라
+    비용은 다음 요청의 재계산 한 번뿐이다.
+    """
+    with _cache_lock:
+        _cache.clear()
+
+
 # ------------------------------------------------------------
 # require_permission — FastAPI Depends 팩토리 (AD-6)
 # ------------------------------------------------------------
