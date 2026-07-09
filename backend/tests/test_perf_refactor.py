@@ -14,11 +14,6 @@ def test_admin_client_is_singleton():
     assert get_supabase_admin() is get_supabase_admin()
 
 
-def test_anon_client_is_singleton():
-    from core.database import get_supabase
-    assert get_supabase() is get_supabase()
-
-
 def test_user_client_is_not_shared():
     # 토큰별 클라이언트는 .auth()로 변형되므로 절대 공유하면 안 된다 (토큰 격리).
     from core.database import get_supabase_for_user

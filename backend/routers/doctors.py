@@ -1,7 +1,6 @@
 from __future__ import annotations
 import secrets
 import string
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,7 +10,7 @@ from core.auth import require_admin
 from core.database import get_supabase_admin, get_supabase_for_user
 from models.doctors import DoctorCreate, DoctorCreatedOut, DoctorOut, DoctorUpdate
 
-router = APIRouter(prefix="/doctors", tags=["doctors"])
+router = APIRouter(prefix="/doctors", tags=["doctors"], dependencies=[Depends(require_admin)])
 
 _DOCTOR_SELECT = (
     "id, user_id, license_number, is_active, is_active, departments(name, id), "
@@ -50,9 +49,7 @@ def _flatten_doctor(row: dict, email: str = "") -> dict:
 
 
 @router.get("", response_model=list[DoctorOut])
-def list_doctors(
-    current_user: Annotated[dict, Depends(require_admin)],
-) -> list[DoctorOut]:
+def list_doctors() -> list[DoctorOut]:
     admin = get_supabase_admin()
     result = (
         admin.table("doctors")
@@ -89,7 +86,6 @@ def list_doctors(
 @router.post("", response_model=DoctorCreatedOut, status_code=status.HTTP_201_CREATED)
 def create_doctor(
     body: DoctorCreate,
-    current_user: Annotated[dict, Depends(require_admin)],
 ) -> DoctorCreatedOut:
     admin = get_supabase_admin()
     temp_password = _generate_temp_password()
@@ -163,7 +159,6 @@ def create_doctor(
 def update_doctor(
     doctor_id: UUID,
     body: DoctorUpdate,
-    current_user: Annotated[dict, Depends(require_admin)],
 ) -> DoctorOut:
     admin = get_supabase_admin()
     update_data = body.model_dump(exclude_unset=True)
@@ -228,7 +223,6 @@ def update_doctor(
 @router.post("/{doctor_id}/reset-password", response_model=dict)
 def reset_doctor_password(
     doctor_id: UUID,
-    current_user: Annotated[dict, Depends(require_admin)],
 ) -> dict:
     admin = get_supabase_admin()
     existing = admin.table("doctors").select("user_id").eq("id", str(doctor_id)).execute()

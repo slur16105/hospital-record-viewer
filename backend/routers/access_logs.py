@@ -8,12 +8,11 @@ from core.auth import require_admin
 from core.database import get_supabase_admin
 from models.access_logs import AccessLogOut, AccessLogPage
 
-router = APIRouter(prefix="/access-logs", tags=["access-logs"])
+router = APIRouter(prefix="/access-logs", tags=["access-logs"], dependencies=[Depends(require_admin)])
 
 
 @router.get("", response_model=AccessLogPage)
 def list_access_logs(
-    current_user: Annotated[dict, Depends(require_admin)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     from_date: date | None = None,

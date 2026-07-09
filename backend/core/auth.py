@@ -17,21 +17,16 @@ _AUTH_HEADERS = {"WWW-Authenticate": "Bearer"}
 # 토큰은 JWKS 공개키로 검증하고, 레거시 HS256(공유 시크릿)은 폴백으로 둔다.
 _JWKS_CACHE: dict | None = None
 
-
-def _jwks_url() -> str:
-    return f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
-
-
-def _issuer() -> str:
-    # Supabase 토큰의 iss 클레임 — 이 프로젝트가 발급한 토큰인지 검증
-    return f"{settings.supabase_url.rstrip('/')}/auth/v1"
+# settings.supabase_url은 startup 이후 불변 → 매 요청 재계산 대신 모듈 상수로 둔다.
+_ISSUER = f"{settings.supabase_url.rstrip('/')}/auth/v1"  # 토큰 iss 클레임(발급처)
+_JWKS_URL = f"{_ISSUER}/.well-known/jwks.json"
 
 
 async def _get_jwks(force: bool = False) -> dict:
     global _JWKS_CACHE
     if _JWKS_CACHE is None or force:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(_jwks_url())
+            resp = await client.get(_JWKS_URL)
             resp.raise_for_status()
             _JWKS_CACHE = resp.json()
     return _JWKS_CACHE
@@ -71,7 +66,7 @@ async def get_current_user(
                 settings.supabase_jwt_secret,
                 algorithms=["HS256"],
                 audience="authenticated",
-                issuer=_issuer(),
+                issuer=_ISSUER,
                 options={"leeway": 10},
             )
         else:
@@ -87,7 +82,7 @@ async def get_current_user(
                 key,
                 algorithms=[alg],
                 audience="authenticated",
-                issuer=_issuer(),
+                issuer=_ISSUER,
                 options={"leeway": 10},
             )
 
@@ -121,12 +116,13 @@ def require_admin(
 ) -> dict:
     """관리자 전용 엔드포인트 가드 — user_profiles.role이 admin이 아니면 403."""
     sub = current_user.get("sub")
+
+    def _deny(reason: str) -> None:
+        _log_admin_denied(request, sub or "unknown", reason)
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "관리자 권한이 필요합니다")
+
     if not sub:
-        _log_admin_denied(request, "unknown", "no_sub")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="관리자 권한이 필요합니다",
-        )
+        _deny("no_sub")
     try:
         result = (
             get_supabase_admin()
@@ -145,15 +141,7 @@ def require_admin(
         )
     rows = result.data or []
     if not rows:
-        _log_admin_denied(request, sub, "no_profile")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="관리자 권한이 필요합니다",
-        )
+        _deny("no_profile")
     if rows[0].get("role") != "admin":
-        _log_admin_denied(request, sub, "role")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="관리자 권한이 필요합니다",
-        )
+        _deny("role")
     return current_user

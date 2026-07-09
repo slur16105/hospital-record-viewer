@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,7 +7,7 @@ from core.auth import require_admin
 from core.database import get_supabase_admin
 from models.patients_admin import PatientOut, PatientUpdate
 
-router = APIRouter(prefix="/patients", tags=["patients-admin"])
+router = APIRouter(prefix="/patients", tags=["patients-admin"], dependencies=[Depends(require_admin)])
 
 
 def _build_patient_out(row: dict, email: str = "") -> PatientOut:
@@ -26,9 +25,7 @@ def _build_patient_out(row: dict, email: str = "") -> PatientOut:
 
 
 @router.get("", response_model=list[PatientOut])
-def list_patients(
-    current_user: Annotated[dict, Depends(require_admin)],
-) -> list[PatientOut]:
+def list_patients() -> list[PatientOut]:
     admin = get_supabase_admin()
     result = (
         admin.table("patients")
@@ -53,7 +50,6 @@ def list_patients(
 def update_patient(
     patient_id: UUID,
     body: PatientUpdate,
-    current_user: Annotated[dict, Depends(require_admin)],
 ) -> PatientOut:
     admin = get_supabase_admin()
     update_data = body.model_dump(exclude_unset=True)
