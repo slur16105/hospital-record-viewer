@@ -13,10 +13,10 @@ export const MENU_ITEMS: MenuItem[] = [
   {
     href: '/records',
     label: '진료기록',
-    // 본인 기록 화면 — 환자 성격의 권한(read_own)에만 노출.
+    // read_own(환자) = 내 진료기록, read_all(관리자) = 전체 진료기록.
     // 의사(read_assigned)는 담당 환자 → 환자별 기록 경로를 쓴다
     // (/records 직접 진입 시 RecordsHome이 /patients로 보정).
-    permissions: ['records:read_own'],
+    permissions: ['records:read_own', 'records:read_all'],
   },
   { href: '/patients', label: '담당 환자', permissions: ['records:read_assigned'] },
   { href: '/users', label: '사용자', permissions: ['users:read'] },

@@ -200,6 +200,9 @@ def list_medical_records(
     display_map = doctor_display_map(
         sorted({r["doctor_user_id"] for r in rows if r.get("doctor_user_id")})
     )
+    patient_names = profile_name_map(
+        sorted({r["patient_user_id"] for r in rows if r.get("patient_user_id")})
+    )
     items = [
         MedicalRecordListItem(
             id=r["id"],
@@ -208,6 +211,7 @@ def list_medical_records(
             is_corrected=r["is_corrected"],
             room_number=_room_number_from_row(r),
             doctor=_doctor_info(r, display_map),
+            patient_name=patient_names.get(r.get("patient_user_id") or ""),
         )
         for r in rows
     ]

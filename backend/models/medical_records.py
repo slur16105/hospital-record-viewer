@@ -17,10 +17,10 @@ class MedicalRecordListItem(BaseModel):
     doctor: DoctorInfo
     is_corrected: bool
     room_number: str | None = None
+    patient_name: str | None = None  # read_all(관리자) 목록·통합 상세 표시용
 
 
 class MedicalRecordDetail(MedicalRecordListItem):
-    patient_name: str | None = None  # 통합 /records/[id] 화면용 — user_profiles.name
     chief_complaint: str | None = None
     prescription: str | None = None
     correction_note: str | None = None

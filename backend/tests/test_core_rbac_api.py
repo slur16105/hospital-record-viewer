@@ -44,10 +44,9 @@ def test_me_admin_has_full_permission_union(client, admin_token):
     assert resp.status_code == 200
     body = resp.json()
     assert {"user", "profile", "roles", "primary_role", "permissions"} <= set(body.keys())
-    # 관리자 역할은 전 권한 보유 (00011: role_permissions ← 전체 SELECT)
+    # 관리자 = 관리·감사 권한 + records:read_all (00015에서 진료 행위 권한 회수)
     perms = set(body["permissions"])
-    assert {"roles:manage", "roles:read", "users:read", "logs:read"} <= perms
-    assert len(perms) >= 16
+    assert {"roles:manage", "roles:read", "users:read", "logs:read", "records:read_all"} <= perms
     assert body["primary_role"] == "관리자"
     role_ids = {r["id"] for r in body["roles"]}
     assert ROLE_ADMIN_ID in role_ids

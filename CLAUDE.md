@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-병원 진료기록 조회 시스템. 환자/의사/관리자 3개 역할의 웹앱이며, Flutter는 이 웹을 감싸는 WebView 쉘이다.
+병원 진료기록 조회 시스템. **동적 RBAC(SaaS Starter Kit) 코어** 위의 병원 앱 모듈 구조다 — 역할·권한·입력필드는 관리자가 화면에서 정의하는 데이터이고(시드: 관리자/의사/환자/원무과), API 접근 판정은 권한 코드로만 한다. Flutter는 이 웹을 감싸는 WebView 쉘이다.
 
 ## 구성 요소 (배포 단위)
 
@@ -18,16 +18,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 브라우저
-  → frontend/proxy.ts        (미들웨어: 세션 확인 + 역할 기반 라우팅/가드)
-  → frontend/app/api/**/route.ts  (BFF: 쿠키에서 토큰 추출 → FastAPI로 Bearer 전달)
-  → backend FastAPI          (JWKS로 JWT 검증 → Supabase 호출)
+  → frontend/proxy.ts        (미들웨어: **인증만** — 세션 유무·must_change_password. 역할/권한 판정 없음)
+  → frontend/app/api/**/route.ts  (BFF: 쿠키에서 토큰 추출 → FastAPI로 Bearer 전달, 판정 없음)
+  → backend FastAPI          (JWKS로 JWT 검증 → require_permission("<code>") 인가 → Supabase 호출)
   → Supabase (PostgREST/Auth)
 ```
 
 - **프론트엔드는 DB에 직접 가지 않는다.** `app/api/**/route.ts` 핸들러가 BFF 역할로 FastAPI(`process.env.FASTAPI_URL`)에 `Authorization: Bearer <token>`을 붙여 프록시한다. 새 데이터 기능은 거의 항상 `frontend/app/api/...` 라우트 핸들러 + `backend/routers/...` 엔드포인트를 **쌍으로** 추가하는 패턴이다.
 - **토큰 추출:** `frontend/lib/supabase/token.ts`의 `getAccessToken()`이 `sb-<ref>-auth-token` 쿠키를 **직접 파싱**한다 (`getUser()` 네트워크 왕복 없음, 청크 쿠키·`base64-` 접두사 처리 포함). 유효성 검증은 백엔드에 위임.
-- **역할 가드:** `frontend/proxy.ts`가 `/admin` `/doctor` `/patient` 보호 경로, 역할 불일치 리다이렉트, `/register` 차단(관리자만 계정 생성), 의사 `must_change_password` 강제 `/change-password`를 모두 처리한다.
-- **백엔드 DB 접근:** `backend/core/database.py`에 3종 클라이언트 — `get_supabase()`(anon), `get_supabase_admin()`(service_role, 라우터 대부분이 이걸 사용), `get_supabase_for_user(token)`(RLS 적용). 엔드포인트는 `Depends(get_current_user)`로 JWT를 검증한 뒤 `current_user["sub"]`로 사용자를 식별한다.
+- **인가(권한) 판정은 백엔드가 유일한 판정자다.** 모든 보호 엔드포인트는 `Depends(require_permission(P.XXX))`(`backend/core/authz.py`) 선언 — 역할명 문자열 분기 금지. 권한 코드 단일 원본은 `backend/core/permissions.py`(시드 00011과 동기화, 단위 테스트로 고정). 프론트 메뉴/화면 노출은 `GET /api/me`의 permissions 기반(`frontend/lib/menu.ts`, `lib/permissions.ts`) — UX일 뿐 보안 경계 아님. URL은 기능 기준(`/records` `/patients` `/users` `/roles` `/departments` `/access-logs`), 구 역할 경로는 리다이렉트만 남음. 셀프 가입 없음(계정은 `users:create` 보유자가 발급 — 초대 링크/임시비번).
+- **동적 필드:** 역할별 입력필드 정의는 `role_fields`(폼 빌더), 값은 `profile_field_values`(typed EAV). 검증·저장은 `backend/core/field_values.py` 단일 경유, 프론트 렌더는 `components/DynamicForm` 단일 렌더러.
+- **백엔드 DB 접근:** `backend/core/database.py`에 3종 클라이언트 — `get_supabase()`(anon), `get_supabase_admin()`(service_role, 라우터 대부분이 이걸 사용), `get_supabase_for_user(token)`(RLS 적용). 엔드포인트는 `Depends(require_permission(...))`(내부에서 JWT 검증 포함)로 인가하고 `current_user["sub"]`로 사용자를 식별한다.
 
 ## 자주 쓰는 명령어
 
@@ -64,7 +65,7 @@ python scripts/seed.py            # backend/.env 의 SERVICE_ROLE 키 사용
 
 ## 시드 계정 (`scripts/seed.py` 기준)
 
-`admin@hospital.test / Admin123!` · `doctor01@hospital.test / Doctor123!` · `patient01@hospital.test / Patient123!`
+`admin@hospital.test / Admin123!` · `doctor01@hospital.test / Doctor123!` · `patient01@hospital.test / Patient123!` · `staff01@hospital.test / Staff123!`(원무과, seed 실행 시)
 
 ---
 
@@ -72,12 +73,12 @@ python scripts/seed.py            # backend/.env 의 SERVICE_ROLE 키 사용
 
 1. **JWT는 ES256(비대칭/JWKS)이다, HS256 아님.** Supabase가 비대칭 서명키로 마이그레이션됨. `backend/core/auth.py`는 JWKS 공개키(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`)로 검증하고 HS256은 레거시 폴백으로만 둔다. "유효 토큰이 전부 401" 증상이면 이 검증 경로부터 의심할 것. (회귀 테스트: `tests/test_auth.py`)
 
-2. **PostgREST 임베드(`select("...departments!inner(name)")` 등)는 FK 관계가 있어야 동작한다.** `patients`/`doctors` ↔ `user_profiles` FK는 `supabase/migrations/00009_profile_relationships.sql`에서 정의됨. 목록 API가 500 나면 이 FK/임베드부터 확인. `!inner` JOIN은 현재 RLS가 "all authenticated"라 동작하지만 RLS 강화 시 결과 누락 위험.
+2. **레거시 병존 기간(00013 적용 전).** 구 `doctors`/`patients` 테이블·`user_profiles.role` enum·`medical_records.patient_id/doctor_id`가 아직 남아 있고 NOT NULL이라, 진료기록 INSERT 등 일부 경로가 레거시 컬럼을 병행 기입한다 — 코드의 `TODO(00013)` 주석 지점. `supabase/migrations/00013_rbac_drop_legacy.sql`(파괴적)은 작성만 된 상태로 **Slur 승인 게이트** 뒤에 적용한다. 적용 전 반드시 TODO(00013) 코드 정리 배포 + `scripts/verify_rbac_migration.py` 통과 확인.
 
 3. **Next.js 16 — 알던 Next가 아니다.** `frontend/AGENTS.md` 경고대로 API·관례·파일 구조가 다를 수 있다. 미들웨어 파일이 `middleware.ts`가 아니라 **`proxy.ts`**다. 코드 작성 전 `node_modules/next/dist/docs/`의 해당 가이드를 확인할 것.
 
-4. **이연된 보안 작업이 있다.** `_bmad-output/implementation-artifacts/deferred-work.md` 참고. 2026-07-08 기준 관리자 역할 가드(#관리자 전용 API), JWT `iss` 검증(#2), 권한 거부 로깅(#9), Supabase 예외 처리(#6), CORS 검증(#3), `X-Forwarded-For` IP 처리(#7)는 완료. 클라이언트 싱글톤(#1)·async 내 동기 호출(#8)도 완료. 접근로그(#4)는 핵심(토큰 만료)은 해결됨 — 동기 전환은 리뷰 후 net-negative로 되돌리고 배경 작업 유지(진짜 감사 보장은 idempotency+fail-closed로 후속). 남은 미처리: `!inner` JOIN 취약성(#5), 그리고 #4 감사 보장(선택). 운영 하드닝 시 여기부터 볼 것.
+4. **이연 작업 현황은 `_bmad-output/implementation-artifacts/deferred-work.md` 참고.** 2026-07-09 RBAC v2 재편으로 #5(!inner JOIN 취약성)는 해소(권한 판정 백엔드 일원화). 남은 게이트: 00013 레거시 제거(함정 #2 참조). v2 재편 전체 맥락은 `_bmad-output/planning-artifacts/sprint-change-proposal-2026-07-09.md`.
 
 ## BMad 산출물
 
-기획/구현 산출물은 `_bmad-output/`에 있다 — `planning-artifacts/`(PRD, 아키텍처 스파인, ERD, 에픽), `implementation-artifacts/`(스토리별 스펙, `sprint-status.yaml`, `deferred-work.md`, 테스트 요약). 진행 상황은 `sprint-status.yaml`이 기준이다 (현재 Epic 1~5 전부 `done`).
+기획/구현 산출물은 `_bmad-output/`에 있다 — `planning-artifacts/`(PRD, 아키텍처 스파인, ERD, 에픽), `implementation-artifacts/`(스토리별 스펙, `sprint-status.yaml`, `deferred-work.md`, 테스트 요약). 진행 상황은 `sprint-status.yaml`이 기준이다 (Epic 1~10 전부 `done` — Epic 6~10은 2026-07-09 RBAC v2 재편).

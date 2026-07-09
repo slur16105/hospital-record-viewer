@@ -19,6 +19,7 @@ interface Record {
   is_corrected: boolean
   room_number: string | null
   doctor: DoctorInfo
+  patient_name: string | null
 }
 
 interface RecordPage {
@@ -38,13 +39,14 @@ function formatDatetime(iso: string): string {
   })
 }
 
-export default function PatientRecordsListClient() {
+export default function PatientRecordsListClient({ scope = 'own' }: { scope?: 'own' | 'all' }) {
+  const isAll = scope === 'all'
   const router = useRouter()
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 20
 
   const { data, isLoading, error } = useQuery<RecordPage>({
-    queryKey: ['patient-records-list', page],
+    queryKey: ['patient-records-list', scope, page],
     queryFn: async () => {
       const res = await fetch(`/api/patient/records?page=${page}&page_size=${PAGE_SIZE}`)
       if (res.status === 403) throw Object.assign(new Error('forbidden'), { status: 403 })
@@ -62,7 +64,7 @@ export default function PatientRecordsListClient() {
 
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>내 진료기록</h1>
+      <h1 className={styles.title}>{isAll ? '전체 진료기록' : '내 진료기록'}</h1>
 
       {isForbidden && <ForbiddenNotice message="진료기록을 볼 수 있는 권한이 없습니다." />}
       {error && !isForbidden && <p className={styles.error}>{(error as Error).message}</p>}
@@ -77,6 +79,7 @@ export default function PatientRecordsListClient() {
             <thead>
               <tr>
                 <th className={styles.th}>진료일시</th>
+                {isAll && <th className={styles.th}>환자명</th>}
                 <th className={styles.th}>진단명</th>
                 <th className={styles.th}>담당의</th>
                 <th className={styles.th}>진료과목</th>
@@ -91,6 +94,7 @@ export default function PatientRecordsListClient() {
                   onClick={() => router.push(`/records/${r.id}`)}
                 >
                   <td className={styles.td}>{formatDatetime(r.visited_at)}</td>
+                  {isAll && <td className={styles.td}>{r.patient_name ?? '—'}</td>}
                   <td className={styles.td}>{r.diagnosis}</td>
                   <td className={styles.td}>{r.doctor.name}</td>
                   <td className={styles.td}>{r.doctor.department}</td>

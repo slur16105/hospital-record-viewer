@@ -154,7 +154,10 @@ export default function UserCreateClient() {
 
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>역할 선택 *</h2>
-          <p className={styles.hint}>체크로 역할을 부여하고, 라디오로 기본 역할을 지정합니다.</p>
+          <p className={styles.hint}>
+            체크로 역할을 부여합니다. 역할을 2개 이상 부여하면 로그인 직후 기준이 되는 기본 역할을
+            지정할 수 있습니다.
+          </p>
           <div className={styles.roleList}>
             {roles
               .filter((role) => role.is_active)
@@ -174,16 +177,18 @@ export default function UserCreateClient() {
                         <span className={styles.roleDesc}>{role.description}</span>
                       )}
                     </label>
-                    <label className={styles.primaryRadio}>
-                      <input
-                        type="radio"
-                        name="primary-role"
-                        checked={primaryRoleId === role.id}
-                        onChange={() => setPrimaryRoleId(role.id)}
-                        disabled={!checked || createMutation.isPending}
-                      />
-                      기본
-                    </label>
+                    {selectedRoleIds.length >= 2 && (
+                      <label className={styles.primaryRadio}>
+                        <input
+                          type="radio"
+                          name="primary-role"
+                          checked={primaryRoleId === role.id}
+                          onChange={() => setPrimaryRoleId(role.id)}
+                          disabled={!checked || createMutation.isPending}
+                        />
+                        기본
+                      </label>
+                    )}
                   </div>
                 )
               })}
