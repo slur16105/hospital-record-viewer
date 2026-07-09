@@ -9,6 +9,8 @@ Usage:
   python scripts/verify_rbac_migration.py     # backend/.env 자동 로드
 """
 
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
@@ -60,11 +62,28 @@ def not_null_count(table: str, column: str) -> int:
     )
 
 
+def try_count(table: str) -> int | None:
+    """레거시 테이블 건수 — 00013 적용 후(테이블 부재)에는 None."""
+    try:
+        return count(table)
+    except Exception:
+        return None
+
+
+def try_not_null_count(table: str, column: str) -> int | None:
+    """레거시 컬럼 not-null 건수 — 00013 적용 후(컬럼 부재)에는 None."""
+    try:
+        return not_null_count(table, column)
+    except Exception:
+        return None
+
+
 checks: list[tuple[str, int, int]] = []  # (설명, 기대, 실제)
+skipped: list[str] = []  # 00013 적용 후 레거시 부재로 N/A 처리된 항목
 
 n_profiles = count("user_profiles")
-n_doctors = count("doctors")
-n_patients = count("patients")
+n_doctors = try_count("doctors")     # 00013 이후 None (레거시 테이블 삭제)
+n_patients = try_count("patients")   # 00013 이후 None
 n_records = count("medical_records")
 n_logs = count("access_logs")
 
@@ -72,18 +91,27 @@ n_logs = count("access_logs")
 checks.append(("user_roles ≥ user_profiles", n_profiles, count("user_roles")))
 # 2) 기본 역할: primary 보유자 수 = 사용자 수
 checks.append(("is_primary 역할 보유자", n_profiles, count("user_roles", is_primary=True)))
-# 3) 의사 필드값
-checks.append(("의사 면허번호 필드값", n_doctors, count("profile_field_values", role_field_id=FIELD_LICENSE)))
-checks.append(("의사 소속과 필드값", n_doctors, count("profile_field_values", role_field_id=FIELD_DEPT)))
-# 4) 환자 필드값
-checks.append(("환자 생년월일 필드값", n_patients, count("profile_field_values", role_field_id=FIELD_BIRTH)))
-checks.append(("환자 연락처 필드값", n_patients, count("profile_field_values", role_field_id=FIELD_PHONE)))
+# 3) 의사 필드값 — 레거시 doctors 대조는 00013 적용 전에만 가능
+if n_doctors is not None:
+    checks.append(("의사 면허번호 필드값", n_doctors, count("profile_field_values", role_field_id=FIELD_LICENSE)))
+    checks.append(("의사 소속과 필드값", n_doctors, count("profile_field_values", role_field_id=FIELD_DEPT)))
+else:
+    skipped += ["의사 면허번호 필드값", "의사 소속과 필드값"]
+# 4) 환자 필드값 — 레거시 patients 대조는 00013 적용 전에만 가능
+if n_patients is not None:
+    checks.append(("환자 생년월일 필드값", n_patients, count("profile_field_values", role_field_id=FIELD_BIRTH)))
+    checks.append(("환자 연락처 필드값", n_patients, count("profile_field_values", role_field_id=FIELD_PHONE)))
+else:
+    skipped += ["환자 생년월일 필드값", "환자 연락처 필드값"]
 # 5) 진료기록 신 FK 채움
 checks.append(("records.patient_user_id 채움", n_records, not_null_count("medical_records", "patient_user_id")))
 checks.append(("records.doctor_user_id 채움", n_records, not_null_count("medical_records", "doctor_user_id")))
-# 6) 접근로그 resource 소급 (record_id 있는 행 전부)
-n_logs_with_record = not_null_count("access_logs", "record_id")
-checks.append(("logs.resource_id 채움", n_logs_with_record, not_null_count("access_logs", "resource_id")))
+# 6) 접근로그 resource 소급 — 레거시 record_id 컬럼이 있을 때만 대조 가능
+n_logs_with_record = try_not_null_count("access_logs", "record_id")
+if n_logs_with_record is not None:
+    checks.append(("logs.resource_id 채움", n_logs_with_record, not_null_count("access_logs", "resource_id")))
+else:
+    skipped.append("logs.resource_id 채움")
 # 7) 시드 무결성
 checks.append(("권한 카탈로그 16종", 16, count("permissions")))
 checks.append(("시드 역할 4종 이상", 4, count("roles")))
@@ -100,6 +128,9 @@ for name, expected, actual in checks:
     if not ok:
         failed += 1
     print(f"{name:<32} {expected:>8} {actual:>8}  {mark}")
+
+for name in skipped:
+    print(f"{name:<32} {'—':>8} {'—':>8}  N/A (00013 적용 — 레거시 부재)")
 
 print("-" * 60)
 print(f"기준 건수: profiles={n_profiles} doctors={n_doctors} patients={n_patients} "

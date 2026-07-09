@@ -92,6 +92,7 @@ export default function RecordCreateClient({ patientId }: { patientId: string })
     if (!validate()) return
 
     const payload: Record<string, unknown> = {
+      // patientId = 환자의 user_id — 백엔드 MedicalRecordCreate.patient_id도 user_id를 받는다 (00013)
       patient_id: patientId,
       visited_at: new Date(visitedAt).toISOString(),
       diagnosis: diagnosis.trim(),

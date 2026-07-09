@@ -2,7 +2,7 @@
 
 담당 판정은 medical_records.doctor_user_id == 본인(sub), 프로필·환자 정보는
 신 스키마(user_profiles + profile_field_values)에서 읽는다.
-응답 필드명·형태는 구 프론트 호환을 위해 유지한다 (id = 레거시 patients.id 등).
+식별자는 전부 user_id 기준이다 (00013 레거시 제거 대응): 응답 id = user_id.
 """
 from __future__ import annotations
 from datetime import date
@@ -27,23 +27,6 @@ router = APIRouter(prefix="/doctor", tags=["doctor"])
 _SEARCH_LIMIT = 50
 
 
-def _legacy_patient_id_map(user_ids: list[str]) -> dict[str, str]:
-    """{user_id: patients.id} — 응답 id 필드·기록 작성 API 호환용 레거시 역조회.
-
-    TODO(00013): legacy patients 테이블 제거 시 이 역조회와 응답 id 의미 재정의
-    """
-    if not user_ids:
-        return {}
-    rows = (
-        get_supabase_admin()
-        .table("patients")
-        .select("id, user_id")
-        .in_("user_id", user_ids)
-        .execute()
-    ).data or []
-    return {r["user_id"]: r["id"] for r in rows}
-
-
 @router.get("/profile", response_model=DoctorProfile)
 def get_doctor_profile(
     current_user: Annotated[dict, Depends(require_permission(P.RECORDS_READ_ASSIGNED))],
@@ -58,16 +41,15 @@ def get_doctor_profile(
     department_id = values.get("department_id")
     license_number = values.get("license_number") or ""
 
-    # TODO(00013): legacy doctors.id 제거 — 응답 doctor_id 호환용으로만 역조회
-    doctor = admin.table("doctors").select("id").eq("user_id", user_id).execute()
-    if not doctor.data or not department_id:
+    # 의사 여부 판정: 소속과 필드값 보유 (레거시 doctors 테이블 역조회 제거)
+    if not department_id:
         raise HTTPException(403, "의사 계정이 아닙니다")
 
     dept = admin.table("departments").select("name").eq("id", department_id).execute()
     department_name = dept.data[0]["name"] if dept.data else ""
 
     return DoctorProfile(
-        doctor_id=doctor.data[0]["id"],
+        doctor_id=user_id,  # user_id (00013: 레거시 doctors.id 대체)
         user_id=user_id,
         name=name,
         department_id=department_id,
@@ -86,7 +68,7 @@ def get_my_patients(
     # 담당 환자 = medical_records.doctor_user_id == 본인 (신컬럼 판정)
     records_result = (
         admin.table("medical_records")
-        .select("patient_id, patient_user_id, visited_at")
+        .select("patient_user_id, visited_at")
         .eq("doctor_user_id", user_id)
         .order("visited_at", desc=True)
         .execute()
@@ -94,13 +76,11 @@ def get_my_patients(
     rows = records_result.data or []
 
     latest_by_user: dict = {}
-    legacy_id_by_user: dict = {}
     for r in rows:
         puid = r.get("patient_user_id")
         if not puid or puid in latest_by_user:
             continue
         latest_by_user[puid] = r["visited_at"]
-        legacy_id_by_user[puid] = r["patient_id"]  # TODO(00013): legacy patients.id
 
     if not latest_by_user:
         return []
@@ -111,7 +91,7 @@ def get_my_patients(
 
     items = [
         MyPatientItem(
-            id=legacy_id_by_user[uid],
+            id=uid,  # user_id (00013: 레거시 patients.id 대체)
             user_id=uid,
             name=name_map.get(uid, ""),
             birth_date=birth_map[uid],
@@ -161,20 +141,19 @@ def search_patients(
     if not user_ids:
         return []
 
-    # 응답 호환: id는 레거시 patients.id — 기록 작성 API가 아직 이를 받는다 (TODO(00013))
-    legacy_ids = _legacy_patient_id_map(user_ids)
+    # 응답 id = user_id — 기록 작성 API(body.patient_id)도 user_id를 받는다
     name_map = profile_name_map(user_ids)
     birth_map = field_value_map(FIELD_BIRTH_DATE, user_ids, "value_date")
     phone_map = field_value_map(FIELD_PHONE, user_ids, "value_text")
 
     return [
         PatientSearchItem(
-            id=legacy_ids[uid],
+            id=uid,
             user_id=uid,
             name=name_map.get(uid, ""),
             birth_date=birth_map[uid],
             phone=phone_map.get(uid, ""),
         )
         for uid in user_ids
-        if uid in legacy_ids and uid in birth_map  # 레거시 행·필수 필드값 없는 사용자 제외
+        if uid in birth_map  # 필수 필드값(생년월일) 없는 사용자 제외
     ]

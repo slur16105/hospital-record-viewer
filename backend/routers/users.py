@@ -24,7 +24,7 @@ from core.field_values import (
     search_users_by_field,
     validate_and_save_field_values,
 )
-from core.permissions import P, ROLE_ADMIN_ID, ROLE_DOCTOR_ID, ROLE_PATIENT_ID
+from core.permissions import P, ROLE_ADMIN_ID
 from models.users import UserCreate, UserRolesUpdate, UserUpdate
 
 logger = logging.getLogger(__name__)
@@ -34,15 +34,6 @@ router = APIRouter(prefix="/users", tags=["users"])
 _PROFILE_COLUMNS = "user_id, name, avatar_url, is_active, must_change_password, updated_at"
 _ROLE_JOIN = "role_id, is_primary, roles(id, name, description, is_system, is_active)"
 
-# ⚠️ 레거시 호환: user_profiles.role(user_role enum, NOT NULL)은 00013 적용 전까지 존재.
-# RBAC 판정에는 절대 쓰지 않는다(AD-10) — INSERT NOT NULL 충족용 매핑일 뿐.
-# 00013 적용(컬럼 DROP) 시 이 매핑과 INSERT의 "role" 키를 함께 제거할 것.
-_LEGACY_ROLE_BY_ID = {
-    ROLE_ADMIN_ID: "admin",
-    ROLE_DOCTOR_ID: "doctor",
-    ROLE_PATIENT_ID: "patient",
-}
-
 
 # ------------------------------------------------------------
 # 공용 헬퍼
@@ -50,7 +41,7 @@ _LEGACY_ROLE_BY_ID = {
 
 
 def _generate_temp_password(length: int = 12) -> str:
-    # doctors.py와 동일 규칙 (문자+숫자 최소 1개). AD-14 경계 유지를 위해 로컬 정의.
+    # 임시 비밀번호 규칙: 문자+숫자 최소 1개. AD-14 경계 유지를 위해 로컬 정의.
     alphabet = string.ascii_letters + string.digits
     while True:
         pw = "".join(secrets.choice(alphabet) for _ in range(length))
@@ -349,8 +340,6 @@ def create_user(
         admin.table("user_profiles").insert({
             "user_id": new_user_id,
             "name": body.name,
-            # 레거시 NOT NULL 컬럼 충족용 — RBAC 판정에 미사용, 00013에서 제거 예정
-            "role": _LEGACY_ROLE_BY_ID.get(str(body.primary_role_id), "patient"),
             "must_change_password": body.delivery == "temp_password",
         }).execute()
 

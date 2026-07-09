@@ -2,10 +2,10 @@
 
 역할명이 아니라 **권한 코드** 보유 여부로 판정된다 (AD-10):
   - /api/access-logs  → logs:read     (관리자만 보유)
-  - /api/patients     → users:read    (관리자·원무과 보유, 의사·환자 미보유)
-  - /api/doctors      → users:read
+  - /api/users        → users:read    (관리자·원무과 보유, 의사·환자 미보유)
   - 쓰기 계열         → users:create / users:update / password:reset_others
 
+(구 /api/doctors·/api/patients 라우터는 00013 정리에서 제거 — /api/users로 대체)
 의사·환자 기본 역할은 위 권한이 없으므로 403이어야 한다.
 """
 import pytest
@@ -15,8 +15,7 @@ from .conftest import auth_headers
 # (path, 필요 권한 코드) — 의사/환자 역할이 보유하지 않는 읽기 권한
 PERMISSION_GUARDED_READS = [
     ("/api/access-logs", "logs:read"),
-    ("/api/patients", "users:read"),
-    ("/api/doctors", "users:read"),
+    ("/api/users", "users:read"),
 ]
 _READ_PATHS = [path for path, _ in PERMISSION_GUARDED_READS]
 
@@ -24,10 +23,9 @@ _READ_PATHS = [path for path, _ in PERMISSION_GUARDED_READS]
 # 가드(require_permission)가 본문 검증보다 먼저 실행되므로 빈 body로 403을 확인할 수 있다.
 _DUMMY_ID = "00000000-0000-0000-0000-000000000000"
 PERMISSION_GUARDED_WRITES = [
-    ("post", "/api/doctors", {}, "users:create"),
-    ("patch", f"/api/doctors/{_DUMMY_ID}", {}, "users:update"),
-    ("post", f"/api/doctors/{_DUMMY_ID}/reset-password", None, "password:reset_others"),
-    ("patch", f"/api/patients/{_DUMMY_ID}", {}, "users:update"),
+    ("post", "/api/users", {}, "users:create"),
+    ("patch", f"/api/users/{_DUMMY_ID}", {}, "users:update"),
+    ("post", f"/api/users/{_DUMMY_ID}/reset-password", None, "password:reset_others"),
 ]
 
 

@@ -18,8 +18,10 @@ What it creates (idempotent — safe to re-run):
   - user_roles       — primary role per account (00011 fixed role UUIDs)
   - profile_field_values — doctor license/department, patient birth_date/phone
                            (00011 fixed role_fields UUIDs, typed EAV)
-  - legacy doctors/patients rows + user_profiles.role  # TODO(00013): drop
-  - medical_records with explicit patient_user_id/doctor_user_id (no trigger reliance)
+  - medical_records with explicit patient_user_id/doctor_user_id
+
+Schema baseline: 00016(레거시 NULL 허용) 이후 — 레거시 doctors/patients 테이블,
+user_profiles.role, medical_records.patient_id/doctor_id는 기입하지 않는다 (00013 대응).
 """
 
 import os
@@ -200,12 +202,10 @@ def get_or_create_user(email: str, password: str, existing: dict[str, str]) -> s
     return user_id
 
 
-def upsert_profile(user_id: str, name: str, legacy_role: str) -> None:
-    # TODO(00013): user_profiles.role(user_role enum)은 레거시 NOT NULL 컬럼 —
-    # RBAC 판정에는 미사용(판정은 user_roles/role_permissions). 00013 적용 시
-    # legacy_role 인자와 "role" 키를 함께 제거할 것.
+def upsert_profile(user_id: str, name: str) -> None:
+    # 역할 판정은 user_roles/role_permissions — user_profiles.role(레거시)은 기입 안 함
     admin.table("user_profiles").upsert(
-        {"user_id": user_id, "role": legacy_role, "name": name, "must_change_password": False},
+        {"user_id": user_id, "name": name, "must_change_password": False},
         on_conflict="user_id",
     ).execute()
 
@@ -285,7 +285,7 @@ def seed_rooms() -> dict[str, str]:
 def seed_admin(existing: dict[str, str]) -> str:
     print("\n[3/7] Admin account")
     user_id = get_or_create_user("admin@hospital.test", "Admin123!", existing)
-    upsert_profile(user_id, "관리자", "admin")
+    upsert_profile(user_id, "관리자")
     assign_role(user_id, ROLE_ADMIN_ID)
     return user_id
 
@@ -295,47 +295,29 @@ def seed_staff(existing: dict[str, str]) -> list[str]:
     user_ids = []
     for email, name in STAFF:
         user_id = get_or_create_user(email, "Staff123!", existing)
-        # TODO(00013): 레거시 user_role enum('admin','doctor','patient')에 원무과가
-        # 없어 'patient'를 필러로 사용 (users.py _LEGACY_ROLE_BY_ID 폴백과 동일).
-        # 실제 권한은 user_roles의 원무과 역할이 결정한다.
-        upsert_profile(user_id, name, "patient")
+        upsert_profile(user_id, name)
         assign_role(user_id, ROLE_STAFF_ID)
         user_ids.append(user_id)
     return user_ids
 
 
 def seed_doctors(existing: dict[str, str]) -> list[dict]:
-    """Return list of {user_id, doctor_id, dept_name, email}"""
+    """Return list of {user_id, dept_name, email}"""
     print("\n[5/7] Doctor accounts")
     doctor_rows = []
     for email, name, dept_name, license_number in DOCTORS:
         user_id = get_or_create_user(email, "Doctor123!", existing)
         dept_id = DEPT_IDS[dept_name]
 
-        upsert_profile(user_id, name, "doctor")
+        upsert_profile(user_id, name)
         assign_role(user_id, ROLE_DOCTOR_ID)
 
         # RBAC v3 필드값 (00011 role_fields 고정 UUID)
         upsert_field_value(user_id, FIELD_DOCTOR_LICENSE_ID, "value_text", license_number)
         upsert_field_value(user_id, FIELD_DOCTOR_DEPARTMENT_ID, "value_text", dept_id)
 
-        # TODO(00013): 레거시 doctors 테이블 — 00013 적용 전까지 병존, 이후 블록 제거
-        existing_doctor = (
-            admin.table("doctors").select("id").eq("user_id", user_id).execute()
-        )
-        if existing_doctor.data:
-            doctor_id = existing_doctor.data[0]["id"]
-        else:
-            result = (
-                admin.table("doctors")
-                .insert({"user_id": user_id, "department_id": dept_id, "license_number": license_number})
-                .execute()
-            )
-            doctor_id = result.data[0]["id"]
-
         doctor_rows.append({
             "user_id": user_id,
-            "doctor_id": doctor_id,
             "dept_name": dept_name,
             "email": email,
         })
@@ -343,34 +325,20 @@ def seed_doctors(existing: dict[str, str]) -> list[dict]:
 
 
 def seed_patients(existing: dict[str, str]) -> list[dict]:
-    """Return list of {user_id, patient_id, email}"""
+    """Return list of {user_id, email}"""
     print("\n[6/7] Patient accounts")
     patient_rows = []
     for email, name, birth_date, phone in PATIENTS:
         user_id = get_or_create_user(email, "Patient123!", existing)
 
-        upsert_profile(user_id, name, "patient")
+        upsert_profile(user_id, name)
         assign_role(user_id, ROLE_PATIENT_ID)
 
         # RBAC v3 필드값 (00011 role_fields 고정 UUID)
         upsert_field_value(user_id, FIELD_PATIENT_BIRTH_DATE_ID, "value_date", birth_date)
         upsert_field_value(user_id, FIELD_PATIENT_PHONE_ID, "value_text", phone)
 
-        # TODO(00013): 레거시 patients 테이블 — 00013 적용 전까지 병존, 이후 블록 제거
-        existing_patient = (
-            admin.table("patients").select("id").eq("user_id", user_id).execute()
-        )
-        if existing_patient.data:
-            patient_id = existing_patient.data[0]["id"]
-        else:
-            result = (
-                admin.table("patients")
-                .insert({"user_id": user_id, "birth_date": birth_date, "phone": phone})
-                .execute()
-            )
-            patient_id = result.data[0]["id"]
-
-        patient_rows.append({"user_id": user_id, "patient_id": patient_id, "email": email})
+        patient_rows.append({"user_id": user_id, "email": email})
     return patient_rows
 
 
@@ -410,12 +378,9 @@ def seed_medical_records(
                 room_id = dept_rooms[visit % len(dept_rooms)] if dept_rooms else None
 
                 record: dict = {
-                    # 신컬럼 (RBAC v3) — 트리거 백필에 의존하지 않고 명시 기입
+                    # 신컬럼 (RBAC v3) — 레거시 patient_id/doctor_id는 기입 안 함 (00016 이후)
                     "patient_user_id": patient["user_id"],
                     "doctor_user_id": doctor["user_id"],
-                    # TODO(00013): 레거시 FK — 00013 적용 시 아래 두 키 제거
-                    "patient_id": patient["patient_id"],
-                    "doctor_id": doctor["doctor_id"],
                     "visited_at": now_minus(offset_days, hours=visit * 3),
                     "diagnosis": diag[0],
                     "chief_complaint": diag[1],

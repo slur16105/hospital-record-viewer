@@ -28,5 +28,5 @@ def test_user_client_is_not_shared():
 
 @pytest.mark.integration
 def test_auth_flow_unaffected_after_refactor(client, admin_token, patient_token):
-    assert client.get("/api/patients", headers=auth_headers(admin_token)).status_code == 200
-    assert client.get("/api/patients", headers=auth_headers(patient_token)).status_code == 403
+    assert client.get("/api/users", headers=auth_headers(admin_token)).status_code == 200
+    assert client.get("/api/users", headers=auth_headers(patient_token)).status_code == 403

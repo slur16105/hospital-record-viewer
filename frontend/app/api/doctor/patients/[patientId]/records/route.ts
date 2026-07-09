@@ -17,8 +17,9 @@ export async function GET(
   const pageSize = url.searchParams.get('page_size') ?? '20'
 
   try {
+    // patientId = 환자의 user_id — 백엔드 목록 필터는 patient_user_id 기준 (00013)
     const res = await fetch(
-      `${FASTAPI_URL}/api/medical-records?patient_id=${patientId}&page=${page}&page_size=${pageSize}`,
+      `${FASTAPI_URL}/api/medical-records?patient_user_id=${patientId}&page=${page}&page_size=${pageSize}`,
       { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }
     )
     const data = await res.json()

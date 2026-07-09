@@ -65,12 +65,12 @@ _LEAK_MARKERS = ["supabase", "postgrest", "psycopg", "traceback", "gkcnyilf"]
 @pytest.mark.integration
 def test_normal_endpoints_unaffected(client, admin_token, patient_token):
     # 정상 권한 흐름이 예외 핸들러 추가 후에도 그대로여야 한다.
-    assert client.get("/api/patients", headers=auth_headers(admin_token)).status_code == 200
-    assert client.get("/api/patients", headers=auth_headers(patient_token)).status_code == 403
+    assert client.get("/api/users", headers=auth_headers(admin_token)).status_code == 200
+    assert client.get("/api/users", headers=auth_headers(patient_token)).status_code == 403
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("path", ["/api/patients", "/api/doctors", "/api/access-logs", "/api/medical-records"])
+@pytest.mark.parametrize("path", ["/api/users", "/api/access-logs", "/api/medical-records"])
 def test_error_responses_do_not_leak_internals(client, patient_token, path):
     # 어떤 응답이든(4xx/5xx 포함) 내부 오류 원문/스택/호스트가 새지 않아야 한다.
     resp = client.get(path, headers=auth_headers(patient_token))

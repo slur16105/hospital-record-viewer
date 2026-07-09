@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 
 class MyPatientItem(BaseModel):
-    id: UUID
+    id: UUID  # = user_id (00013: 레거시 patients.id 대체 — 필드명은 프론트 호환 유지)
     user_id: UUID
     name: str
     birth_date: date
@@ -13,7 +13,7 @@ class MyPatientItem(BaseModel):
 
 
 class PatientSearchItem(BaseModel):
-    id: UUID
+    id: UUID  # = user_id (00013: 레거시 patients.id 대체 — 필드명은 프론트 호환 유지)
     user_id: UUID
     name: str
     birth_date: date
@@ -21,7 +21,7 @@ class PatientSearchItem(BaseModel):
 
 
 class DoctorProfile(BaseModel):
-    doctor_id: UUID
+    doctor_id: UUID  # = user_id (00013: 레거시 doctors.id 대체 — 필드명은 프론트 호환 유지)
     user_id: UUID
     name: str
     department_id: UUID

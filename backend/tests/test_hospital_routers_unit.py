@@ -42,13 +42,6 @@ EXPECTED_SINGLE = {
     ("PATCH", "/api/rooms/{room_id}"): P.DEPARTMENTS_MANAGE,
     # access_logs.py
     ("GET", "/api/access-logs"): P.LOGS_READ,
-    # 구 관리자 라우터 (00013 이후 제거 예정 — /api/users 대체)
-    ("GET", "/api/doctors"): P.USERS_READ,
-    ("POST", "/api/doctors"): P.USERS_CREATE,
-    ("PATCH", "/api/doctors/{doctor_id}"): P.USERS_UPDATE,
-    ("POST", "/api/doctors/{doctor_id}/reset-password"): P.PASSWORD_RESET_OTHERS,
-    ("GET", "/api/patients"): P.USERS_READ,
-    ("PATCH", "/api/patients/{patient_id}"): P.USERS_UPDATE,
 }
 
 # require_any_permission: 코드 집합 (진료기록 조회 스코프 분기)
@@ -176,13 +169,13 @@ def test_require_any_permission_503_when_lookup_fails(monkeypatch):
 
 def test_no_role_name_branching_in_hospital_routers():
     from routers import (
-        access_logs, departments, doctor, doctors,
-        hospital_fields, medical_records, patients_admin, rooms,
+        access_logs, departments, doctor,
+        hospital_fields, medical_records, rooms,
     )
 
     for module in (
-        access_logs, departments, doctor, doctors,
-        hospital_fields, medical_records, patients_admin, rooms,
+        access_logs, departments, doctor,
+        hospital_fields, medical_records, rooms,
     ):
         source = inspect.getsource(module)
         for pattern in ('role == "', "role == '", '.eq("role"', "get(\"role\") =="):

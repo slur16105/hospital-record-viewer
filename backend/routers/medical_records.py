@@ -3,7 +3,10 @@
 접근 판정은 require_permission/require_any_permission + 신컬럼
 (medical_records.patient_user_id / doctor_user_id)으로 일원화한다.
 RLS·역할명 분기·doctors/patients 임베드에 의존하지 않는다.
-응답 필드명은 구 프론트 호환을 위해 그대로 유지한다 (doctor.id = 레거시 doctors.id).
+식별자는 전부 user_id 기준이다 (00013 레거시 제거 대응):
+  - doctor.id 응답 필드 = doctor_user_id
+  - 생성 body.patient_id = 환자의 user_id
+  - 목록 필터 쿼리파람 = patient_user_id
 """
 from __future__ import annotations
 import ipaddress
@@ -33,17 +36,15 @@ router = APIRouter(tags=["medical-records"])
 
 _ROOM_JOIN = "examination_rooms(room_number)"
 
-# doctor_id는 레거시 doctors.id — 응답 doctor.id 호환용으로만 select한다.
-# TODO(00013): legacy patient_id/doctor_id 제거 시 select·응답 매핑 재검토
 _LIST_SELECT = (
     "id, visited_at, diagnosis, is_corrected, room_id, "
-    f"doctor_id, doctor_user_id, patient_user_id, {_ROOM_JOIN}"
+    f"doctor_user_id, patient_user_id, {_ROOM_JOIN}"
 )
 
 _DETAIL_SELECT = (
     "id, visited_at, diagnosis, chief_complaint, prescription, "
     "is_corrected, correction_note, corrected_at, created_at, room_id, "
-    f"doctor_id, doctor_user_id, patient_user_id, {_ROOM_JOIN}"
+    f"doctor_user_id, patient_user_id, {_ROOM_JOIN}"
 )
 
 _READ_ANY = require_any_permission(
@@ -80,7 +81,6 @@ def _log_access(user_id: str, action: str, record_id: str | None, ip: str | None
     # resource_type/resource_id를 명시 기록한다 (00012 일반화 컬럼).
     payload: dict = {"user_id": user_id, "action": action, "resource_type": "medical_record"}
     if record_id:
-        payload["record_id"] = record_id  # TODO(00013): legacy record_id 컬럼 제거 시 삭제
         payload["resource_id"] = record_id
     if ip:
         payload["ip_address"] = ip
@@ -100,7 +100,7 @@ def _room_number_from_row(row: dict) -> str | None:
 def _doctor_info(row: dict, display_map: dict) -> DoctorInfo:
     display = display_map.get(row.get("doctor_user_id") or "", {})
     return DoctorInfo(
-        id=row["doctor_id"],  # 레거시 doctors.id — 프론트 호환 유지
+        id=row["doctor_user_id"],  # 의사의 user_id (00013: 레거시 doctors.id 대체)
         name=display.get("name", ""),
         department=display.get("department", ""),
     )
@@ -160,7 +160,7 @@ def list_medical_records(
     current_user: Annotated[dict, Depends(_READ_ANY)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-    patient_id: UUID | None = None,
+    patient_user_id: UUID | None = None,
     from_date: date | None = None,
     to_date: date | None = None,
 ) -> MedicalRecordPage:
@@ -171,9 +171,8 @@ def list_medical_records(
     query = admin.table("medical_records").select(_LIST_SELECT, count="exact")
     query = _apply_read_scope(query, permissions, user_id)
 
-    if patient_id:
-        # TODO(00013): patient_id 쿼리 파라미터는 레거시 patients.id — 구 프론트 호환 유지
-        query = query.eq("patient_id", str(patient_id))
+    if patient_user_id:
+        query = query.eq("patient_user_id", str(patient_user_id))
     if from_date:
         query = query.gte("visited_at", from_date.isoformat())
     if to_date:
@@ -185,12 +184,12 @@ def list_medical_records(
     rows = result.data or []
     total = result.count or 0
 
-    # patient_id 지정 조회에서 스코프 밖 기록이 존재하면 403 (첫 방문 빈 목록과 구분)
-    if patient_id and not rows and total == 0 and P.RECORDS_READ_ALL not in permissions:
+    # patient_user_id 지정 조회에서 스코프 밖 기록이 존재하면 403 (첫 방문 빈 목록과 구분)
+    if patient_user_id and not rows and total == 0 and P.RECORDS_READ_ALL not in permissions:
         any_records = (
             admin.table("medical_records")
             .select("id", count="exact")
-            .eq("patient_id", str(patient_id))
+            .eq("patient_user_id", str(patient_user_id))
             .limit(1)
             .execute()
         )
@@ -268,28 +267,18 @@ def create_medical_record(
     user_id: str = current_user["sub"]
     admin = get_supabase_admin()
 
-    # TODO(00013): legacy patient_id/doctor_id 제거 — 병행 기간엔 두 컬럼이 NOT NULL이라
-    # patients/doctors에서 역조회해 함께 채운다. 00013 이후 신컬럼만 남긴다.
+    # body.patient_id = 환자의 user_id (00013: 레거시 patients.id 대체)
     patient = (
-        admin.table("patients")
-        .select("id, user_id")
-        .eq("id", str(body.patient_id))
+        admin.table("user_profiles")
+        .select("user_id")
+        .eq("user_id", str(body.patient_id))
         .execute()
     )
     if not patient.data:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "환자를 찾을 수 없습니다")
-    patient_user_id = patient.data[0]["user_id"]
-
-    doctor = admin.table("doctors").select("id").eq("user_id", user_id).execute()
-    if not doctor.data:
-        # 병행 기간 한계: records:create 보유자라도 레거시 doctors 행이 없으면 저장 불가
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "의사 계정이 아닙니다")
-    legacy_doctor_id = doctor.data[0]["id"]
 
     payload: dict = {
-        "patient_id": str(body.patient_id),   # legacy — TODO(00013) 제거
-        "doctor_id": legacy_doctor_id,        # legacy — TODO(00013) 제거
-        "patient_user_id": patient_user_id,
+        "patient_user_id": str(body.patient_id),
         "doctor_user_id": user_id,            # 작성자 본인 자동 설정
         "visited_at": body.visited_at.isoformat(),
         "diagnosis": body.diagnosis,

@@ -27,9 +27,10 @@ def list_access_logs(
 ) -> AccessLogPage:
     admin = get_supabase_admin()
 
+    # 00013 대응: 레거시 record_id 컬럼 대신 일반화 컬럼(resource_type/resource_id)만 읽는다.
     query = (
         admin.table("access_logs")
-        .select("id, user_id, record_id, action, ip_address, created_at", count="exact")
+        .select("id, user_id, resource_type, resource_id, action, ip_address, created_at", count="exact")
         .order("created_at", desc=True)
     )
     if from_date:
@@ -46,7 +47,12 @@ def list_access_logs(
 
     # Batch-resolve user names and patient names
     user_ids = list({r["user_id"] for r in rows})
-    record_ids = list({r["record_id"] for r in rows if r.get("record_id")})
+    # 진료기록 리소스만 환자 이름 해석 대상 (record_id 응답 필드는 이 resource_id로 채움)
+    record_ids = list({
+        r["resource_id"]
+        for r in rows
+        if r.get("resource_id") and r.get("resource_type") == "medical_record"
+    })
 
     name_map: dict = {}
     if user_ids:
@@ -80,8 +86,12 @@ def list_access_logs(
             id=r["id"],
             user_id=r["user_id"],
             accessor_name=name_map.get(r["user_id"], ""),
-            record_id=r.get("record_id"),
-            patient_name=patient_map.get(r.get("record_id", ""), ""),
+            record_id=(
+                r.get("resource_id") if r.get("resource_type") == "medical_record" else None
+            ),
+            patient_name=patient_map.get(
+                r.get("resource_id") if r.get("resource_type") == "medical_record" else "", ""
+            ),
             action=r["action"],
             ip_address=r.get("ip_address"),
             created_at=r["created_at"],

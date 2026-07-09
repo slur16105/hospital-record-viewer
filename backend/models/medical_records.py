@@ -36,6 +36,7 @@ class MedicalRecordPage(BaseModel):
 
 
 class MedicalRecordCreate(BaseModel):
+    # patient_id = 환자의 user_id (00013 레거시 제거 — 필드명은 프론트 호환으로 유지)
     patient_id: UUID
     visited_at: datetime
     diagnosis: str = Field(..., min_length=1)

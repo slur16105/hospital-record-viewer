@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from postgrest.exceptions import APIError
 
 from core.config import settings, APP_VERSION
-from routers import health, medical_records, departments, rooms, doctors, patients_admin, access_logs, doctor, me, roles, users
+from routers import health, medical_records, departments, rooms, access_logs, doctor, me, roles, users
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,6 @@ app.include_router(health.router)
 app.include_router(medical_records.router, prefix="/api")
 app.include_router(departments.router, prefix="/api")
 app.include_router(rooms.router, prefix="/api")
-app.include_router(doctors.router, prefix="/api")
-app.include_router(patients_admin.router, prefix="/api")
 app.include_router(access_logs.router, prefix="/api")
 app.include_router(doctor.router, prefix="/api")
 app.include_router(me.router, prefix="/api")
